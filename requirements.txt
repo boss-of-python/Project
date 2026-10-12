@@ -1,0 +1,14 @@
+# --- Core runtime (always required; all offline) -----------------------
+# Offline speech-to-text (Vosk engine; the ~40 MB model is downloaded once by
+# scripts/download_models.py and then the app works with zero internet).
+vosk>=0.3.45
+# Microphone capture for the STT stream.
+sounddevice>=0.4.6
+numpy>=1.24
+# Offline text-to-speech (uses OS voices: SAPI5 on Windows, NSSpeech/espeak elsewhere).
+pyttsx3>=2.90
+
+# NOTE: tkinter is a Python standard-library module.
+#   Windows/macOS Python installs ship it.
+#   Debian/Ubuntu:  sudo apt install python3-tk
+#   Fedora:         sudo dnf install python3-tkinter

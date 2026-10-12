@@ -1,0 +1,5 @@
+# --- Optional: offline LLM for free-form commands -----------------------
+# Enables natural-language phrasing beyond the built-in rule parser.
+# If this fails to build on your machine (needs a C++ compiler), THANS still
+# works fully offline via the rule parser - just skip this file.
+llama-cpp-python>=0.2.90

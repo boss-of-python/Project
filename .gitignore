@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Models are large binaries - kept OUT of git, downloaded on demand
+# (see models/README.md and scripts/download_models.py).
+models/*
+!models/README.md
+!models/.gitkeep
+
+# Build / installer artifacts
+build/
+dist/
+*.spec
+installer/windows/Output/
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
