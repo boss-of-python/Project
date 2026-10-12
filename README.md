@@ -89,7 +89,7 @@ files). Smaller or larger LLMs are selectable with `--model` — see the script'
 ### Windows
 1. `installer\windows\build_exe.bat` — builds `dist\THANS.exe` (PyInstaller)
    and, if [Inno Setup](https://jrsoftware.org/isdl.php) is installed, compiles
-   `installer/windows/setup.iss` into **`installer/windows/Output/THANS-Setup-0.1.0.exe`**
+   `installer/windows/setup.iss` into **`installer/windows/Output/THANS-Setup-0.2.0.exe`**
    (classic wizard: pick folder, desktop shortcut, uninstaller).
    Download models first (`python scripts/download_models.py`) and they are
    bundled into the installer; otherwise the installed app offers one-click download.

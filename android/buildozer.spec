@@ -4,7 +4,7 @@ package.name = thans
 package.domain = org.thans
 source.dir = .
 source.include_exts = py,pvs,kv,json,md,txt
-version = 0.1.0
+version = 0.2.0
 
 # Android needs only pure-Python core + Kivy UI + pyjnius for the (optional)
 # on-device speech/TTS bridge. No vosk/sounddevice/pyttsx3 — those are desktop-only.
