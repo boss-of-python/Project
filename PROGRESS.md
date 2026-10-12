@@ -10,8 +10,8 @@ with an optional small offline LLM for free-form phrasing.
 Desktop build = tkinter UI (steps 1–50). Android build = Kivy UI reusing the same
 pure-Python core (steps 51–60).
 
-**Last update:** 2026-10-12 — Phase 10 complete (shared UX intelligence & animation engine); starting Phase 11 (Desktop UI/UX)
-**Current position:** STEP 70 / 85 — Phase 10 complete; Phase 11 in progress
+**Last update:** 2026-10-12 — Phase 11 complete (Minimalistic Desktop UI/UX + 60fps sonic canvas + live file workspace + intent preview); starting Phase 12 (Android APK Kivy UI/UX)
+**Current position:** STEP 78 / 85 — Phase 11 complete; Phase 12 in progress
 **Resume rule:** do the first unchecked step; do not skip ahead; commit + push after each phase.
 
 Legend: ⬜ not started · 🚧 in progress · ✅ done
@@ -123,14 +123,14 @@ Legend: ⬜ not started · 🚧 in progress · ✅ done
 
 ## Phase 11 — Impressive Minimalistic Desktop UI/UX (Windows & Linux) (steps 71–78)
 
-- [ ] 71. Minimalistic design system (`thans/app.py`) with Dark & Light themes, smooth theme cross-fade transition, and refined typography
-- [ ] 72. Animated **Sonic Visualizer Canvas** in header (60fps multi-ribbon sine waves + glowing orb reacting to Idle, Listening, Thinking, Speaking, and Success/Error states)
-- [ ] 73. Interactive **Breadcrumb Bar** (`🏠 root › folder › subfolder`) + **Trash Badge (`♻️ N`)** + one-click **Undo (`↩`)** & **Theme Toggle (`🌙/☀️`)**
-- [ ] 74. Collapsible **Live File Workspace Sidebar** with instant filter box, smart file icons, file sizes, double-click to navigate/open, single-click context action bar (`Open`, `Rename`, `Move`, `Trash`), and **animated emerald highlight pulses** on newly created/modified items
-- [ ] 75. **Live Intent Preview Bar** & clickable **Quick-Action Chips** above the input bar (real-time parsed action badge as you type + `Tab` autocomplete for commands & filenames)
-- [ ] 76. **Animated Chat Stream** with role badges, command pills, smooth streaming text reveal, and slide-in toast notifications
-- [ ] 77. Keyboard shortcuts (`Ctrl+K` / `/` focus command bar, `Tab` autocomplete, `Ctrl+Z` undo, `Ctrl+L` clear chat, `Ctrl+B` toggle sidebar, `F2` mic toggle) & modernized Settings modal
-- [ ] 78. Headless Desktop UI test suite (`tests/test_desktop_ui.py`) validating widget creation, animations, sidebar interactions, theme transitions, and command flow
+- [x] 71. Minimalistic design system (`thans/app.py`) with Dark & Light themes, smooth theme cross-fade transition, and refined typography
+- [x] 72. Animated **Sonic Visualizer Canvas** in header (60fps multi-ribbon sine waves + glowing orb reacting to Idle, Listening, Thinking, Speaking, and Success/Error states)
+- [x] 73. Interactive **Breadcrumb Bar** (`🏠 root › folder › subfolder`) + **Trash Badge (`♻️ N`)** + one-click **Undo (`↩`)** & **Theme Toggle (`🌙/☀️`)**
+- [x] 74. Collapsible **Live File Workspace Sidebar** with instant filter box, smart file icons, file sizes, double-click to navigate/open, single-click context action bar (`Open`, `Rename`, `Move`, `Trash`), and **animated emerald highlight pulses** on newly created/modified items
+- [x] 75. **Live Intent Preview Bar** & clickable **Quick-Action Chips** above the input bar (real-time parsed action badge as you type + `Tab` autocomplete for commands & filenames)
+- [x] 76. **Animated Chat Stream** with role badges, command pills, smooth streaming text reveal, and slide-in toast notifications
+- [x] 77. Keyboard shortcuts (`Ctrl+K` / `/` focus command bar, `Tab` autocomplete, `Ctrl+Z` undo, `Ctrl+L` clear chat, `Ctrl+B` toggle sidebar, `F2` mic toggle) & modernized Settings modal
+- [x] 78. Headless Desktop UI test suite (`tests/test_desktop_ui.py`) validating widget creation, animations, sidebar interactions, theme transitions, and command flow
 
 ## Phase 12 — Impressive Minimalistic Android APK UI/UX (steps 79–85)
 
@@ -161,6 +161,7 @@ Legend: ⬜ not started · 🚧 in progress · ✅ done
 | 2026-10-12 | 52–60 | Phase 8: Android (Kivy) port reusing the core; headless-validated; CI builds the APK artifact. PR #2 opened & merged. |
 | 2026-10-12 | 61–65 | Phase 9: Fixed Android/Desktop runtime calls, runtime mic permissions, `undo` for `organize`, `cd ..`, and APK CI dependencies/caching. |
 | 2026-10-12 | 66–70 | Phase 10: Shared UX intelligence (`thans/ui_helpers.py`) + 60fps animation & theme engine (`thans/animations.py`) + 11 unit tests. |
+| 2026-10-12 | 71–78 | Phase 11: Minimalistic Desktop UI/UX (`thans/app.py`) with 60fps Sonic Visualizer, Live File Workspace Sidebar, Breadcrumb Bar, Live Intent Preview, Quick Chips, Theme cross-fade, and headless Desktop UI tests. |
 
 ## Known decisions (so future sessions don't re-litigate)
 
