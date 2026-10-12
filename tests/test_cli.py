@@ -14,7 +14,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+ROOT_STR = str(Path(__file__).resolve().parent.parent)
+sys.path.insert(0, ROOT_STR)
 
 from thans import cli  # noqa: E402
 from thans.__main__ import main  # noqa: E402
@@ -185,6 +186,22 @@ class TestCliSubprocess(CliTestBase):
         self.assertEqual(p.returncode, 0, p.stderr)
         self.assertTrue((self.tmp / "piped").is_dir())
         self.assertIn("Working folder", p.stdout)
+
+
+class TestConsoleEncoding(unittest.TestCase):
+    """The CLI must not crash on a legacy (cp1252) Windows console."""
+
+    def test_emoji_listing_survives_cp1252(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, "note.txt").write_text("hi")
+            Path(tmp, "docs").mkdir()
+            env = dict(os.environ, PYTHONIOENCODING="cp1252", PYTHONPATH=ROOT_STR)
+            proc = subprocess.run(
+                [sys.executable, "-m", "thans", "--run", "list", "--root", tmp],
+                capture_output=True, env=env, cwd=ROOT_STR,
+            )
+        self.assertEqual(proc.returncode, 0, proc.stderr.decode("utf-8", "replace"))
+        self.assertNotIn(b"UnicodeEncodeError", proc.stderr)
 
 
 if __name__ == "__main__":
