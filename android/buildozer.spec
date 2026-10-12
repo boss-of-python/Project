@@ -27,7 +27,7 @@ android.ndk_api = 21
 android.archs = arm64-v8a
 android.accept_sdk_license = True
 android.allow_backup = True
-p4a.branch = develop
+p4a.branch = master
 
 [buildozer]
 log_level = 2

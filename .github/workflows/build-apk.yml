@@ -70,16 +70,20 @@ jobs:
           chmod +x stage_thans.sh
           ./stage_thans.sh
           set +e
-          yes | buildozer -v android debug
-          rc=$?
+          buildozer -v android debug 2>&1 | tee buildozer.out
+          rc=${PIPESTATUS[0]}
           set -e
+          tail -n 80 buildozer.out
           if [ "$rc" != "0" ]; then
             echo "::error::buildozer failed (rc=$rc)"
-            echo "----- bin/ -----"
+            # Surface the actual error in the Checks annotations (logs are not
+            # downloadable from some environments).
+            grep -iE 'error:|traceback|exception:|command failed|stderr:' buildozer.out | tail -n 30 | while IFS= read -r line; do
+              echo "::error::$line"
+            done
+            echo "----- last 40 lines -----" >> "$GITHUB_STEP_SUMMARY"
+            tail -n 40 buildozer.out >> "$GITHUB_STEP_SUMMARY"
             ls -la bin || true
-            echo "----- last 80 lines of any log -----"
-            find .buildozer -type f \( -name '*.log' -o -name 'build.log' \) -print 2>/dev/null | head -20
-            find .buildozer -type f \( -name '*.log' -o -name 'build.log' \) -exec tail -n 40 {} \; 2>/dev/null | tail -n 200
             exit "$rc"
           fi
           ls -lh bin/*.apk
