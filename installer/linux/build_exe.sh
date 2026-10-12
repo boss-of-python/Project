@@ -26,6 +26,8 @@ rm -rf "$STAGE"
 mkdir -p "$STAGE"
 cp dist/THANS "$STAGE/thans"
 chmod +x "$STAGE/thans"
+# one-time model downloader (the app's "⬇ Models" button needs it at runtime)
+cp -r scripts "$STAGE/scripts"
 if [ -d models ] && [ -n "$(ls -A models 2>/dev/null)" ]; then
   cp -r models "$STAGE/models"
 fi

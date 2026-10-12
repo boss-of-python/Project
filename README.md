@@ -93,7 +93,16 @@ python -m thans
 #   --json            machine-readable output for --run
 ```
 
-Debian/Ubuntu: `sudo apt install python3-tk` first (tkinter).
+**Platform notes (running from source):**
+
+| OS | Prerequisites |
+|----|---------------|
+| **Windows 10/11** | Python 3.10+ from python.org (tkinter & the `py` launcher included) |
+| **Linux (Debian/Ubuntu)** | `sudo apt install python3-tk libportaudio2` — tkinter for the UI, **PortAudio for the microphone** (voice input). Spoken replies optionally use `espeak` (`sudo apt install espeak-ng`) |
+| **macOS** | Python 3.10+ (tkinter included); microphone works out of the box |
+
+Voice features degrade gracefully: without PortAudio/Vosk the app runs fully
+as a text assistant (status chips show what's active).
 
 ## Command reference (voice or text)
 
@@ -144,14 +153,17 @@ files). Smaller or larger LLMs are selectable with `--model` — see the script'
    (classic wizard: pick folder, desktop shortcut, uninstaller).
    Download models first (`python scripts/download_models.py`) and they are
    bundled into the installer; otherwise the installed app offers one-click download.
-2. No Inno Setup? `dist\THANS.exe` + the `models/` folder next to it is a
-   working portable app — copy anywhere, double-click, done.
+2. No Inno Setup? `dist\THANS.exe` + the `models/` and `scripts/` folders next
+   to it is a working portable app — copy anywhere, double-click, done.
+   (`scripts/download_models.py` powers the in-app "⬇ Models" button.)
 
 ### Linux
 ```bash
-installer/linux/build_exe.sh     # builds dist/THANS
+installer/linux/build_exe.sh     # builds dist/THANS (+ staged scripts/ & models/)
 installer/linux/install.sh       # installs to /opt/thans + launcher (thans.desktop)
 ```
+For voice input on the target machine: `sudo apt install libportaudio2`
+(optional spoken replies: `espeak-ng`).
 
 ### macOS
 `python -m venv .venv && . .venv/bin/activate && pip install -r requirements.txt`
@@ -201,18 +213,21 @@ python -m thans --selftest          # full suite: parser, actions, engine, CLI, 
 python scripts/render_ui_preview.py # regenerate docs/ui-preview.png
 ```
 
-The suite (190+ tests) runs **without a display**: the UI layers are exercised
-through faithful test doubles of tkinter (`tests/faketk.py`) and Kivy
-(`tests/fakekivy.py`) that validate option names, run the real animation loop
-on a virtual clock and drive real worker threads. Android-specific checks parse
-`android/thans.kv` and prove every `app.*` handler and every widget id that the
-Python code touches actually exists.
+The suite (100+ tests) runs **without a display**: the UI layers are exercised
+through faithful test doubles of tkinter (in `tests/test_desktop_ui.py`) and
+Kivy (in `tests/test_android_ui.py`) that validate option names, run the real
+animation loop on a virtual clock and drive real worker threads.
+Android-specific checks parse `android/thans.kv` and prove every `app.*`
+handler and every widget id that the Python code touches actually exists.
+`tests/test_platform.py` covers the cross-platform plumbing (downloader
+discovery, working-dir resolution, OS dispatch for "open").
 
 ## Works with
 
 * **Windows 10/11** — portable `THANS.exe` or the Inno Setup wizard (desktop +
   Start-menu shortcuts, icon, uninstaller)
-* **Linux** — PyInstaller build + `install.sh` (launcher, `.desktop` entry, icon)
+* **Linux** — PyInstaller build + `install.sh` (launcher, `.desktop` entry, icon);
+  voice input needs `libportaudio2`
 * **macOS** — `pip install -r requirements.txt && python -m thans`
 * **Android 5.0+** — `android/` Kivy port; APK from GitHub Actions or buildozer
 * **Anything headless** — `thans --run "…"` / `thans --cli`

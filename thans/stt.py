@@ -85,7 +85,8 @@ class VoiceSTT:
                 import sounddevice as sd
             except Exception as e:  # noqa: BLE001
                 self.recording = False
-                state(f"sounddevice not installed: {e}")
+                hint = " (Linux: sudo apt install libportaudio2)" if isinstance(e, OSError) else ""
+                state(f"sounddevice unavailable: {e}{hint}")
                 return
             try:
                 self._ensure_engine()

@@ -14,7 +14,6 @@ from __future__ import annotations
 
 from datetime import datetime
 import queue
-import shutil
 import subprocess
 import sys
 import threading
@@ -25,7 +24,7 @@ from typing import Optional
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
-from . import APP_NAME, APP_TAGLINE, __version__, animations, config, model_manager, ui_helpers
+from . import APP_NAME, APP_TAGLINE, __version__, animations, config, model_manager, platforms, ui_helpers
 from .engine import Engine
 from .stt import VoiceSTT
 from .tts import Speaker
@@ -1170,15 +1169,19 @@ class ThansApp:
         self._post("sys", "Downloading offline models (one-time; needs internet)…", "⬇ ")
 
         def job() -> None:
-            script = config.app_root() / "scripts" / "download_models.py"
-            py = shutil.which("python3") or shutil.which("python") or sys.executable
+            try:
+                script, py = platforms.find_downloader()
+            except (FileNotFoundError, RuntimeError) as e:
+                self._q.put(("post", "err", f"Could not start downloader: {e}", None, False))
+                self._q.put(("downloading", False))
+                return
             try:
                 proc = subprocess.Popen(
                     [py, str(script), "--dir", str(config.models_dir())],
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
                     text=True,
-                    cwd=str(config.app_root()),
+                    cwd=str(script.parent.parent),
                 )
                 assert proc.stdout is not None
                 for line in proc.stdout:

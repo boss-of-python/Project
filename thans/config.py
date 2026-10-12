@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 APP_NAME = "THANS"
-APP_VERSION = "0.1.0"
+APP_VERSION = "0.2.0"  # keep in sync with thans/__init__.__version__
 
 #: Name of the hidden trash folder created inside the working root.
 TRASH_DIRNAME = ".thans_trash"

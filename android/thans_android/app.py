@@ -30,7 +30,7 @@ from kivy.uix.boxlayout import BoxLayout  # noqa: E402
 from kivy.uix.button import Button  # noqa: E402
 from kivy.uix.label import Label  # noqa: E402
 
-from thans import animations, ui_helpers  # noqa: E402
+from thans import animations, platforms, ui_helpers  # noqa: E402
 from thans.engine import Engine  # noqa: E402
 
 from . import audio  # noqa: E402
@@ -80,7 +80,9 @@ class ThansAndroidApp(App):
             loaded = Builder.get_root()
         self._root = loaded
 
-        workdir = self._workdir or os.getcwd()
+        # Guarantees a writable folder (Android: the app's internal files dir;
+        # falls back to home / temp if the CWD is ever read-only).
+        workdir = platforms.resolve_workdir(self._workdir)
         self.engine = Engine(
             workdir,
             {

@@ -19,6 +19,7 @@ ANDROID = "ANDROID_DATA" in os.environ or "ANDROID_ROOT" in os.environ
 
 _ctx = None
 _tts = None
+_tts_ready = False
 _sr = None
 _listener = None
 
@@ -61,6 +62,31 @@ def ensure_mic_permission() -> bool:
 
 
 # ---------------------------------------------------------------- TTS
+def _make_tts_init():
+    """Python implementation of TextToSpeech.OnInitListener (jnius).
+
+    TextToSpeech only accepts speak() after its async init finishes; without
+    this callback the first (and often every) speak() call is silently lost.
+    """
+    from jnius import JavaClass
+
+    class T(JavaClass):  # noqa: N801 - jnius requires Java-style names
+        __javainterfaces__ = ["android.speech.tts.TextToSpeech$OnInitListener"]
+
+        def onInit(self, status):
+            global _tts, _tts_ready
+            if status == 0 and _tts is not None:  # TEXT_TO_SPEECH_SUCCESS
+                try:
+                    _tts.setSpeechRate(1.05)
+                except Exception:
+                    pass
+                _tts_ready = True
+            else:
+                _tts = False  # mark unavailable for good
+
+    return T()
+
+
 def tts_available() -> bool:
     global _tts
     if not ANDROID:
@@ -69,19 +95,15 @@ def tts_available() -> bool:
         try:
             from jnius import autoclass
             TextToSpeech = autoclass("android.speech.tts.TextToSpeech")
-            _tts = TextToSpeech(_context(), None)
-            try:
-                _tts.setSpeechRate(1.05)
-            except Exception:
-                pass
+            _tts = TextToSpeech(_context(), _make_tts_init())
         except Exception:
             _tts = False
-    return bool(_tts)
+    return bool(_tts)  # device has a TTS engine (init may still be running)
 
 
 def speak(text: str) -> None:
-    if not tts_available():
-        return
+    if not tts_available() or not _tts_ready:
+        return  # speak() before async init completes is dropped by Android
     try:
         t = re.sub(r"[#*`>|_]+", " ", text or "")
         t = re.sub(r"\s+", " ", t).strip()[:300]

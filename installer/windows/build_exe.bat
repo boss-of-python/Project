@@ -49,8 +49,8 @@ if exist "%ISCC%" (
     echo.
     echo ============================================
     echo  Portable build ready: dist\THANS.exe
-    echo  (copy dist\THANS.exe + the models\ folder
-    echo   together - that IS the app)
+    echo  (copy dist\THANS.exe + the models\ and scripts\
+    echo   folders together - that IS the app)
     echo  For a wizard installer, install Inno Setup 6
     echo  from https://jrsoftware.org/isdl.php and
     echo  re-run this script.

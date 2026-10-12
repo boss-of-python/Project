@@ -7,6 +7,9 @@
 #define MyAppVersion "0.2.0"
 #define MyAppPublisher "THANS"
 #define MyAppExeName "THANS.exe"
+; models are optional at build time — the installed app can download them
+; one-click via the "⬇ Models" button (scripts\download_models.py)
+#define HaveModels (FileExists("..\\..\\models\\vosk-model-small-en-us-0.15\\model.bin") = 1)
 
 [Setup]
 ; NOTE: AppId must stay the same across versions for upgrades to work.
@@ -38,8 +41,12 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 [Files]
 ; the executable
 Source: "..\..\dist\THANS.exe"; DestDir: "{app}"; Flags: ignoreversion
-; all offline models (STT + optional LLM)
+; one-time model downloader (used by the app's "⬇ Models" button)
+Source: "..\..\scripts\download_models.py"; DestDir: "{app}\scripts"; Flags: ignoreversion
+; all offline models (STT + optional LLM) — skipped when not downloaded
+#if HaveModels
 Source: "..\..\models\*"; DestDir: "{app}\models"; Flags: recursesubdirs ignoreversion
+#endif
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppExeName}"
