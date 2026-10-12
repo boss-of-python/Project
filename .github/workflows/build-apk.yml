@@ -8,11 +8,6 @@ on:
       - "android/**"
       - "thans/**"
       - ".github/workflows/build-apk.yml"
-  pull_request:
-    paths:
-      - "android/**"
-      - "thans/**"
-      - ".github/workflows/build-apk.yml"
 
 concurrency:
   group: apk-${{ github.ref }}
@@ -29,42 +24,65 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-          cache: "pip"
 
-      - name: Cache Buildozer global directory
+      - name: Cache Buildozer
         uses: actions/cache@v4
         with:
           path: |
             ~/.buildozer
             android/.buildozer
-          key: buildozer-sdk-${{ runner.os }}-ubuntu2204-api33-ndk25b-v3
+          key: buildozer-sdk-${{ runner.os }}-ubuntu2204-api33-ndk25b-arm64-v4
 
       - name: Install system deps + buildozer
         run: |
           sudo apt-get update
-          sudo apt-get install -y \
-            git zip unzip openjdk-17-jdk \
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+            git zip unzip \
             autoconf automake libtool libtool-bin pkg-config \
             cmake build-essential ccache patch lld \
             libffi-dev libssl-dev zlib1g-dev \
-            libncurses-dev libncurses5-dev libncursesw5-dev libtinfo5 python3-pip
+            libncurses-dev libncursesw5-dev \
+            unzip zip
           python -m pip install --upgrade pip "setuptools<70" wheel virtualenv
           python -m pip install "cython==0.29.36" "buildozer==1.5.0"
+          java -version
+          echo "JAVA_HOME=${JAVA_HOME}"
 
       - name: Run core & UI test suite
         run: python -m thans --selftest
 
       - name: Stage core package and build debug APK
         working-directory: android
+        env:
+          ANDROIDSDK: ""
         run: |
-          unset ANDROID_NDK GRADLE_HOME ANDROID_NDK_HOME ANDROID_NDK_ROOT
+          unset ANDROID_NDK GRADLE_HOME ANDROID_NDK_HOME ANDROID_NDK_ROOT ANDROIDSDK ANDROIDNDK
           chmod +x stage_thans.sh
           ./stage_thans.sh
-          buildozer android debug
+          set +e
+          yes | buildozer -v android debug
+          rc=$?
+          set -e
+          if [ "$rc" != "0" ]; then
+            echo "::error::buildozer failed (rc=$rc)"
+            echo "----- bin/ -----"
+            ls -la bin || true
+            echo "----- last 80 lines of any log -----"
+            find .buildozer -type f \( -name '*.log' -o -name 'build.log' \) -print 2>/dev/null | head -20
+            find .buildozer -type f \( -name '*.log' -o -name 'build.log' \) -exec tail -n 40 {} \; 2>/dev/null | tail -n 200
+            exit "$rc"
+          fi
+          ls -lh bin/*.apk
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
@@ -74,7 +92,6 @@ jobs:
           if-no-files-found: error
 
       - name: Auto-commit built APK to releases/THANS-android.apk
-        if: github.event_name != 'pull_request'
         run: |
           mkdir -p releases
           cp -f android/bin/*.apk releases/THANS-android.apk

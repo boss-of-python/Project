@@ -26,6 +26,22 @@ class AmbiguousError(ValueError):
 # --------------------------------------------------------------------------
 
 
+def _looks_outside(name: str) -> bool:
+    """True if ``name`` is absolute, drive-qualified, or contains ``..``.
+
+    Path.is_absolute() is False on Windows for POSIX-style ``/etc/passwd``,
+    so we also treat a leading slash/backslash or ``C:`` as an escape.
+    """
+    raw = Path(name)
+    if raw.is_absolute() or ".." in raw.parts:
+        return True
+    if name[:1] in "/\\":
+        return True
+    if len(name) >= 2 and name[1] == ":" and name[0].isalpha():
+        return True
+    return False
+
+
 def ensure_inside(root: Path, p: Path, *, label: str | None = None) -> Path:
     """Resolve ``p`` and raise UnsafePathError unless it stays inside ``root``.
 
@@ -116,8 +132,7 @@ def find_item(base: Path, name: str, root: Path | None = None) -> Path:
     if not name:
         raise ValueError("No name given.")
     confine = root if root is not None else base
-    raw = Path(name)
-    if raw.is_absolute() or ".." in raw.parts:
+    if _looks_outside(name):
         return safe_path(confine, base, name)
     direct = base / name
     if direct.exists():
@@ -181,8 +196,7 @@ def find_dir(base: Path, name: str, root: Path | None = None) -> Path:
     confine = root if root is not None else base
     if not name or name in ("~", "."):
         return ensure_inside(confine, base, label=name or ".")
-    raw = Path(name)
-    if raw.is_absolute() or ".." in raw.parts:
+    if _looks_outside(name):
         p = safe_path(confine, base, name)
         if not p.is_dir():
             raise NotFoundError(f"folder '{name}' not found in '{base.name}'.")

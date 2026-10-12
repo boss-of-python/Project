@@ -9,7 +9,7 @@ version = 0.2.0
 
 # Android needs only pure-Python core + Kivy UI + pyjnius for the (optional)
 # on-device speech/TTS bridge. No vosk/sounddevice/pyttsx3 — those are desktop-only.
-requirements = python3,kivy==2.3.0,pyjnius,android
+requirements = python3,kivy,pyjnius,android
 
 icon.filename = %(source.dir)s/thans_android/assets/icon.png
 presplash.filename = %(source.dir)s/thans_android/assets/presplash.png
@@ -24,13 +24,10 @@ android.api = 33
 android.minapi = 21
 android.ndk = 25b
 android.ndk_api = 21
-android.sdk = 33
-android.archs = arm64-v8a,armeabi-v7a
+android.archs = arm64-v8a
 android.accept_sdk_license = True
 android.allow_backup = True
-p4a.branch = master
-osx.python_version = 3
-osx.kivy_version = 2.3.0
+p4a.branch = develop
 
 [buildozer]
 log_level = 2
