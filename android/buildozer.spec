@@ -25,5 +25,5 @@ android.archs = arm64-v8a,armeabi-v7a
 android.accept_sdk_license = true
 
 [buildozer]
-log_level = info
+log_level = 2
 warn_on_root = 0
