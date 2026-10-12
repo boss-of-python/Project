@@ -37,7 +37,8 @@ class CliTestBase(unittest.TestCase):
     def run_cli(self, argv):
         """Run ``python -m thans`` in a subprocess; return (code, stdout, stderr)."""
         p = subprocess.run([sys.executable, "-m", "thans", *argv],
-                           cwd=str(REPO), capture_output=True, text=True, timeout=120)
+                           cwd=str(REPO), capture_output=True, text=True,
+                           encoding="utf-8", errors="replace", timeout=120)
         return p.returncode, p.stdout, p.stderr
 
 
@@ -182,7 +183,8 @@ class TestCliSubprocess(CliTestBase):
             self.skipTest("already inside a --selftest run")
         p = subprocess.run([sys.executable, "-m", "thans", "--cli", "--root", str(self.tmp)],
                            cwd=str(REPO), input="create folder piped\nexit\n",
-                           capture_output=True, text=True, timeout=120)
+                           capture_output=True, text=True, encoding="utf-8",
+                           errors="replace", timeout=120)
         self.assertEqual(p.returncode, 0, p.stderr)
         self.assertTrue((self.tmp / "piped").is_dir())
         self.assertIn("Working folder", p.stdout)
@@ -202,6 +204,38 @@ class TestConsoleEncoding(unittest.TestCase):
             )
         self.assertEqual(proc.returncode, 0, proc.stderr.decode("utf-8", "replace"))
         self.assertNotIn(b"UnicodeEncodeError", proc.stderr)
+
+
+class TestUtf8Output(unittest.TestCase):
+    """use_utf8_output() must rescue legacy streams without touching good ones."""
+
+    def _swap(self, stream):
+        old_out, old_err = sys.stdout, sys.stderr
+        sys.stdout = sys.stderr = stream
+        self.addCleanup(setattr, sys, "stdout", old_out)
+        self.addCleanup(setattr, sys, "stderr", old_err)
+        return stream
+
+    def test_legacy_codepage_stream_is_switched(self):
+        import io
+        from thans import use_utf8_output
+        stream = self._swap(io.TextIOWrapper(io.BytesIO(), encoding="cp1252"))
+        use_utf8_output()
+        self.assertEqual(stream.encoding.lower().replace("-", ""), "utf8")
+        stream.write("📁")                      # would have raised before
+
+    def test_utf8_stream_is_left_alone(self):
+        import io
+        from thans import use_utf8_output
+        stream = self._swap(io.TextIOWrapper(io.BytesIO(), encoding="utf-8"))
+        use_utf8_output()
+        self.assertIn("utf", stream.encoding.lower())
+
+    def test_stream_without_encoding_is_ignored(self):
+        import io
+        from thans import use_utf8_output
+        self._swap(io.StringIO())               # no .encoding at all
+        use_utf8_output()                       # must not raise
 
 
 if __name__ == "__main__":

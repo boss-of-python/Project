@@ -69,6 +69,8 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    from . import use_utf8_output
+    use_utf8_output()                         # legacy consoles (Windows cp1252)
     a = _parser().parse_args(argv)
 
     if a.selftest:
@@ -85,7 +87,6 @@ def main(argv: list[str] | None = None) -> int:
     # ---------------------------------------------------------- headless
     if a.commands or a.cli:
         from . import cli
-        cli.use_utf8_output()                 # Windows consoles default to cp1252
         engine = cli.make_engine(root=a.root, cfg=cfg, use_llm=a.llm)
         code = 0
         if a.commands:

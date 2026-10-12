@@ -25,25 +25,10 @@ import sys
 from pathlib import Path
 from typing import Iterable, TextIO
 
-from . import APP_NAME, __version__, config
+from . import APP_NAME, __version__, config, use_utf8_output  # noqa: F401  (re-export)
 from .engine import HELP_TEXT, Engine
 
 PROMPT = "thans:{}> "
-
-
-def use_utf8_output() -> None:
-    """Make stdout/stderr survive emoji on legacy consoles.
-
-    Windows terminals default to a cp1252 code page; writing our ``📁``/``📄``
-    listings (or JSON with non-ASCII names) would raise ``UnicodeEncodeError``
-    and abort the run. Reconfiguring to UTF-8 with ``errors="replace"`` keeps
-    the output readable instead of crashing. A no-op where unsupported.
-    """
-    for stream in (sys.stdout, sys.stderr):
-        try:
-            stream.reconfigure(encoding="utf-8", errors="replace")   # type: ignore[attr-defined]
-        except Exception:                     # already UTF-8, redirected, StringIO…
-            pass
 BANNER = (
     f"{APP_NAME} {__version__} — offline file assistant (headless mode)\n"
     "Type 'help' for the command list, 'exit' (or Ctrl-D) to quit."
