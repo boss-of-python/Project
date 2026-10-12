@@ -92,9 +92,17 @@ def download(url: str, dest: Path, label: str) -> None:
         raise
 
 
+def _vosk_ready(target: Path) -> bool:
+    try:
+        from thans.model_manager import vosk_model_ready
+        return vosk_model_ready(target)
+    except Exception:
+        return (target / "am" / "final.mdl").exists() or (target / "model.bin").exists()
+
+
 def fetch_stt(models_dir: Path, force: bool) -> None:
     target = models_dir / STT["name"]
-    if (target / "model.bin").exists() and not force:
+    if _vosk_ready(target) and not force:
         print(f"  = STT model: already present ({target.name}) - skipping")
         return
     zip_path = models_dir / (STT["name"] + ".zip")
@@ -108,8 +116,8 @@ def fetch_stt(models_dir: Path, force: bool) -> None:
     with zipfile.ZipFile(zip_path) as z:
         z.extractall(models_dir)
     zip_path.unlink(missing_ok=True)
-    if not (target / "model.bin").exists():
-        sys.exit(f"ERROR: extraction did not produce {target}/model.bin")
+    if not _vosk_ready(target):
+        sys.exit(f"ERROR: extraction did not produce a Vosk model at {target}")
     print(f"  ✓ STT model ready: {target.name}/")
 
 

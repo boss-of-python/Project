@@ -39,7 +39,7 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 ; the executable
 Source: "..\..\dist\THANS.exe"; DestDir: "{app}"; Flags: ignoreversion
 ; all offline models (STT + optional LLM)
-Source: "..\..\models\*"; DestDir: "{app}\models"; Flags: recursesubdirs ignoreversion
+Source: "..\..\models\*"; DestDir: "{app}\models"; Flags: recursesubdirs ignoreversion skipifsourcedoesntexist
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppExeName}"

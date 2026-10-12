@@ -8,7 +8,7 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from .common import NotFoundError, find_item, rel, safe_path, to_trash
+from .common import NotFoundError, ensure_inside, find_item, rel, safe_path, to_trash
 
 
 def _dest_path(root: Path, current: Path, dest: str, s: Path) -> Path:
@@ -68,7 +68,7 @@ def create_file(root: Path, current: Path, name: str, content: str | None = None
 
 
 def list_dir(root: Path, current: Path, path: str | None = None, count_only: bool = False):
-    d = find_item(current, path) if path else current
+    d = find_item(current, path, root=root) if path else ensure_inside(root, current)
     if not d.is_dir():
         raise NotFoundError(f"'{path}' is not a folder.")
     entries = sorted(d.iterdir(), key=lambda p: (p.is_file(), p.name.casefold()))
@@ -93,7 +93,7 @@ def list_dir(root: Path, current: Path, path: str | None = None, count_only: boo
 
 
 def rename_item(root: Path, current: Path, src: str, dest: str):
-    s = find_item(current, src)
+    s = find_item(current, src, root=root)
     # a plain new name (no '/') stays next to the original item
     base_for_dest = s.parent if ("/" not in dest and "\\" not in dest) else current
     dp = _dest_path(root, base_for_dest, dest, s)
@@ -105,7 +105,7 @@ def rename_item(root: Path, current: Path, src: str, dest: str):
 
 
 def move_item(root: Path, current: Path, src: str, dest: str):
-    s = find_item(current, src)
+    s = find_item(current, src, root=root)
     dp = _dest_path(root, current, dest, s)
     if dp.exists():
         raise ValueError(f"'{rel(dp, root)}' already exists.")
@@ -115,7 +115,7 @@ def move_item(root: Path, current: Path, src: str, dest: str):
 
 
 def copy_item(root: Path, current: Path, src: str, dest: str):
-    s = find_item(current, src)
+    s = find_item(current, src, root=root)
     dp = _dest_path(root, current, dest, s)
     if dp.exists():
         raise ValueError(f"'{rel(dp, root)}' already exists.")
@@ -128,7 +128,7 @@ def copy_item(root: Path, current: Path, src: str, dest: str):
 
 
 def delete_item(root: Path, current: Path, path: str, permanent: bool = False):
-    p = find_item(current, path)
+    p = find_item(current, path, root=root)
     label = rel(p, root)
     if permanent:
         if p.is_dir():

@@ -14,14 +14,14 @@ from pathlib import Path
 from typing import Any
 
 APP_NAME = "THANS"
-APP_VERSION = "0.1.0"
+APP_VERSION = "0.2.0"
 
 #: Name of the hidden trash folder created inside the working root.
 TRASH_DIRNAME = ".thans_trash"
 
 #: Default offline models (filenames inside ``models/``).
 VOSK_MODEL_NAME = "vosk-model-small-en-us-0.15"
-DEFAULT_LLM_MODEL = "Qwen2.5-0.5B-Instruct-Q4_K_M.gguf"
+DEFAULT_LLM_MODEL = "qwen2.5-0.5b-instruct-q4_k_m.gguf"
 
 DEFAULTS: dict[str, Any] = {
     "root": str(Path.home()),        # working root (all ops confined to this)

@@ -128,7 +128,7 @@ All models live in the dedicated **`models/`** folder (see `models/README.md`):
 ```
 models/
 ├── vosk-model-small-en-us-0.15/            ← speech recognition (~40 MB)
-└── Qwen2.5-0.5B-Instruct-Q4_K_M.gguf       ← optional LLM (~408 MB)
+└── qwen2.5-0.5b-instruct-q4_k_m.gguf       ← optional LLM (~408 MB)
 ```
 
 `python scripts/download_models.py` fetches both (progress bars, skips existing
@@ -146,6 +146,8 @@ files). Smaller or larger LLMs are selectable with `--model` — see the script'
    bundled into the installer; otherwise the installed app offers one-click download.
 2. No Inno Setup? `dist\THANS.exe` + the `models/` folder next to it is a
    working portable app — copy anywhere, double-click, done.
+
+License: MIT (`LICENSE`). Release notes: `CHANGELOG.md`.
 
 ### Linux
 ```bash
@@ -201,7 +203,7 @@ python -m thans --selftest          # full suite: parser, actions, engine, CLI, 
 python scripts/render_ui_preview.py # regenerate docs/ui-preview.png
 ```
 
-The suite (190+ tests) runs **without a display**: the UI layers are exercised
+The suite (100+ tests) runs **without a display**: the UI layers are exercised
 through faithful test doubles of tkinter (`tests/faketk.py`) and Kivy
 (`tests/fakekivy.py`) that validate option names, run the real animation loop
 on a virtual clock and drive real worker threads. Android-specific checks parse

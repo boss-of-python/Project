@@ -20,7 +20,7 @@ python -m pip install -r requirements-llm.txt || echo [!] LLM dependency failed 
 python -m pip install -r requirements-build.txt || exit /b 1
 
 echo === [2/4] Self-test ===
-python -m thans --selftest || echo [!] tests failed - continuing anyway
+python -m thans --selftest || exit /b 1
 
 echo === [3/4] Building THANS.exe ===
 python scripts\build_installer.py || exit /b 1

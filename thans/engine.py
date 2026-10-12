@@ -159,7 +159,7 @@ class Engine:
         else:
             d = actions.safe_path(self.root, self.current, name)
             if not d.is_dir():
-                d = actions.find_dir(self.current, name)
+                d = actions.find_dir(self.current, name, root=self.root)
         self.current = d
         return True, f"Now in '{actions.rel(d, self.root) or '.'}'.", None
 
@@ -171,13 +171,14 @@ class Engine:
         a = rec.get("action")
         try:
             if a in ("rename", "move"):
-                src, dest = Path(rec["src"]), Path(rec["dest"])
+                src = actions.ensure_inside(self.root, Path(rec["src"]))
+                dest = actions.ensure_inside(self.root, Path(rec["dest"]))
                 if dest.exists():
                     shutil.move(str(dest), str(src))
                     return True, f"Undid {a}: '{actions.rel(dest, self.root)}' is back as '{actions.rel(src, self.root)}'.", None
                 return False, f"Nothing left to undo for that {a}.", None
             if a == "copy":
-                d = Path(rec["dest"])
+                d = actions.ensure_inside(self.root, Path(rec["dest"]))
                 if d.exists():
                     if d.is_dir():
                         shutil.rmtree(d)
@@ -186,7 +187,7 @@ class Engine:
                     return True, f"Undid copy: removed '{actions.rel(d, self.root)}'.", None
                 return False, "The copy is already gone — nothing to undo.", None
             if a == "delete":
-                original = Path(rec.get("original") or rec.get("path"))
+                original = actions.ensure_inside(self.root, Path(rec.get("original") or rec.get("path")))
                 if rec.get("permanent"):
                     return False, "That item was deleted permanently, so it cannot be restored.", None
                 trashed = rec.get("trashed")
@@ -197,7 +198,7 @@ class Engine:
                     return False, "The trashed entry is no longer in .thans_trash.", None
                 return False, "It seems it was already restored.", None
             if a == "mkdir":
-                d = Path(rec["created"])
+                d = actions.ensure_inside(self.root, Path(rec["created"]))
                 if d.is_dir():
                     if any(d.iterdir()):
                         return False, "That folder is not empty — delete its contents first (I won't).", None
@@ -205,7 +206,7 @@ class Engine:
                     return True, f"Undid create: removed empty folder '{actions.rel(d, self.root)}'.", None
                 return False, "That folder is already gone — nothing to undo.", None
             if a == "touch":
-                f = Path(rec["created"])
+                f = actions.ensure_inside(self.root, Path(rec["created"]))
                 if f.is_file():
                     t = actions.to_trash(self.root, f)
                     return True, f"Undid create: moved '{actions.rel(f, self.root)}' to trash.", None
@@ -214,13 +215,14 @@ class Engine:
                 moves = rec.get("moves") or []
                 restored = 0
                 for dest_s, orig_s in reversed(moves):
-                    dp, op = Path(dest_s), Path(orig_s)
+                    dp = actions.ensure_inside(self.root, Path(dest_s))
+                    op = actions.ensure_inside(self.root, Path(orig_s))
                     if dp.exists() and not op.exists():
                         op.parent.mkdir(parents=True, exist_ok=True)
                         shutil.move(str(dp), str(op))
                         restored += 1
                 for dir_s in reversed(rec.get("dirs") or []):
-                    d = Path(dir_s)
+                    d = actions.ensure_inside(self.root, Path(dir_s))
                     if d.is_dir() and not any(d.iterdir()):
                         d.rmdir()
                 if restored:

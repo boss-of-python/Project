@@ -15,7 +15,7 @@ echo "=== [1/3] Installing dependencies ==="
 "$PY" -m pip install -r requirements-build.txt
 
 echo "=== [2/3] Self-test ==="
-"$PY" -m thans --selftest || echo "[!] tests failed - continuing anyway"
+"$PY" -m thans --selftest
 
 echo "=== [3/3] Building ==="
 "$PY" scripts/build_installer.py
