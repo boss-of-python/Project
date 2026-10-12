@@ -128,6 +128,12 @@ class TestParser(unittest.TestCase):
         expect("organize files by date", "organize", path=None, mode="date")
         expect("organize files in downloads by type", "organize", path="downloads", mode="extension")
         expect("organize", "organize", path=None, mode="extension")
+        # "by <mode>" alone must NOT be swallowed as a folder name
+        expect("organize by type", "organize", path=None, mode="extension")
+        expect("organize by date", "organize", path=None, mode="date")
+        expect("organize by extension", "organize", path=None, mode="extension")
+        expect("organize using mtime", "organize", path=None, mode="date")
+        expect("organize the downloads by date", "organize", path="downloads", mode="date")
 
     def test_cd(self):
         expect("go to work", "cd", path="work")

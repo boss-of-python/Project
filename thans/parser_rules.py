@@ -97,8 +97,15 @@ def _organize_build(m: re.Match) -> dict:
         p = mm.group(1).strip()
     elif p in ("files", "items", "everything", "the files"):
         p = ""
+    mode = m["mode"]
+    if not mode:
+        # "organize by type" — the folder part is optional, but the lazy
+        # regex above may swallow "by <mode>" as the folder name
+        mm2 = re.match(r"^(?:by|using) (extension|type|date|day|time|mtime)$", p)
+        if mm2:
+            mode, p = mm2.group(1), ""
     p = _name(p)
-    return {"action": "organize", "params": {"path": p or None, "mode": _ORG_MODE.get(m["mode"], "extension")}}
+    return {"action": "organize", "params": {"path": p or None, "mode": _ORG_MODE.get(mode, "extension")}}
 
 
 def _mkdir_build(m: re.Match) -> Optional[dict]:

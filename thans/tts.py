@@ -58,6 +58,13 @@ class Speaker:
         t = re.sub(r"\s+", " ", t).strip()
         if not t:
             return
+        # Keep the queue bounded: if the TTS worker ever dies, `say()` calls
+        # must not accumulate without limit.
+        try:
+            if self._q.qsize() >= 50:
+                self._q.get_nowait()  # drop the oldest, keep the freshest
+        except queue.Empty:
+            pass
         self._q.put(t[:400])
 
     def set_rate(self, rate: int) -> None:

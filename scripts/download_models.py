@@ -17,7 +17,7 @@ from __future__ import annotations
 import argparse
 import shutil
 import sys
-import tempfile
+import urllib.error
 import urllib.request
 import zipfile
 from pathlib import Path
@@ -74,7 +74,10 @@ def download(url: str, dest: Path, label: str) -> None:
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "THANS-downloader/0.1"})
         with urllib.request.urlopen(req, timeout=60) as r:
-            total = int(r.headers.get("Content-Length") or 0)
+            try:
+                total = int(r.headers.get("Content-Length") or 0)
+            except (TypeError, ValueError):
+                total = 0
             done = 0
             with open(tmp, "wb") as f:
                 while True:
@@ -105,8 +108,12 @@ def fetch_stt(models_dir: Path, force: bool) -> None:
     print("  … extracting STT model")
     if target.exists():
         shutil.rmtree(target)
-    with zipfile.ZipFile(zip_path) as z:
-        z.extractall(models_dir)
+    try:
+        with zipfile.ZipFile(zip_path) as z:
+            z.extractall(models_dir)
+    except zipfile.BadZipFile:
+        sys.exit(f"ERROR: {zip_path.name} is not a valid zip (incomplete download?). "
+                 "Delete it and run again.")
     zip_path.unlink(missing_ok=True)
     if not (target / "model.bin").exists():
         sys.exit(f"ERROR: extraction did not produce {target}/model.bin")
@@ -122,8 +129,11 @@ def fetch_llm(models_dir: Path, name: str, force: bool) -> None:
         cfg = config.load_config()
         if cfg.get("llm_model") != spec["file"]:
             cfg["llm_model"] = spec["file"]
-            config.save_config(cfg)
-            print(f"  … default LLM in config set to {spec['file']}")
+            try:
+                config.save_config(cfg)
+                print(f"  … default LLM in config set to {spec['file']}")
+            except OSError as e:
+                print(f"  ! could not persist default LLM to config: {e}")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -143,16 +153,23 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     models_dir = Path(a.dir).expanduser().resolve()
-    models_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        models_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        sys.exit(f"ERROR: cannot create models folder '{a.dir}': {e}")
     llm_name = a.model or next(n for n, s in LLM_CATALOG.items() if s.get("default"))
     if llm_name not in LLM_CATALOG:
         sys.exit(f"ERROR: unknown --model '{llm_name}'. Use --list.")
 
     print(f"THANS offline model downloader → {models_dir}")
-    if a.only in (None, "stt"):
-        fetch_stt(models_dir, a.force)
-    if a.only in (None, "llm"):
-        fetch_llm(models_dir, llm_name, a.force)
+    try:
+        if a.only in (None, "stt"):
+            fetch_stt(models_dir, a.force)
+        if a.only in (None, "llm"):
+            fetch_llm(models_dir, llm_name, a.force)
+    except (urllib.error.URLError, OSError, EOFError) as e:
+        sys.exit(f"ERROR: network problem while downloading: {e}\n"
+                 "Check your connection and run again — finished files are skipped.")
 
     print("\nDone. THANS now runs 100% offline:")
     print("    python -m thans")

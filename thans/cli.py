@@ -34,6 +34,10 @@ BANNER = (
     "Type 'help' for the command list, 'exit' (or Ctrl-D) to quit."
 )
 
+#: Set when the reading end of our output pipe went away (e.g. `| head -1`);
+#: commands still count as successful and the process exits quietly.
+_PIPE_CLOSED = False
+
 
 def make_engine(root: str | Path | None = None,
                 cfg: dict | None = None,
@@ -49,8 +53,8 @@ def make_engine(root: str | Path | None = None,
         cfg["permanent_delete"] = bool(permanent_delete)
     try:
         return Engine(cfg.get("root") or config.resolve_root(Path.home()), cfg)
-    except OSError as e:                       # unreadable / missing root
-        raise SystemExit(f"{APP_NAME}: working folder problem: {e}")
+    except (OSError, ValueError) as e:  # unreadable / missing / malformed root
+        raise SystemExit(f"{APP_NAME}: working folder problem: {e}") from e
 
 
 def _payload(result) -> dict:
@@ -65,22 +69,47 @@ def _payload(result) -> dict:
 def emit(result, as_json: bool = False, quiet: bool = False,
          out: TextIO | None = None, err: TextIO | None = None) -> bool:
     """Print one result; returns ``result.ok``."""
+    global _PIPE_CLOSED
     out = out if out is not None else sys.stdout
     err = err if err is not None else sys.stderr
-    if quiet and not as_json:
+    try:
+        if quiet and not as_json:
+            return bool(result.ok)
+        if as_json:
+            stream = out if result.ok else err
+            stream.write(json.dumps(_payload(result), ensure_ascii=False) + "\n")
+            stream.flush()
+            return bool(result.ok)
+        if result.ok:
+            out.write(result.message.rstrip("\n") + "\n")
+            out.flush()
+        else:
+            err.write(f"{APP_NAME}: {result.message}".rstrip("\n") + "\n")
+            err.flush()
         return bool(result.ok)
-    if as_json:
-        stream = out if result.ok else err
-        stream.write(json.dumps(_payload(result), ensure_ascii=False) + "\n")
-        stream.flush()
+    except BrokenPipeError:
+        # the consumer (e.g. `| head -1`) left — the command itself was fine
+        _PIPE_CLOSED = True
+        silence_broken_pipe(out, err)
         return bool(result.ok)
-    if result.ok:
-        out.write(result.message.rstrip("\n") + "\n")
-        out.flush()
-    else:
-        err.write(f"{APP_NAME}: {result.message}".rstrip("\n") + "\n")
-        err.flush()
-    return bool(result.ok)
+
+
+def silence_broken_pipe(*streams: TextIO) -> None:
+    """Redirect the process's own stdout/stderr to devnull if they broke.
+
+    Called after ``BrokenPipeError`` (e.g. ``thans --run … | head -1``) so the
+    interpreter's final flush at shutdown cannot raise again. Non-standard
+    streams (e.g. StringIO in tests) are left untouched.
+    """
+    import os
+    for s in streams:
+        if s is not sys.stdout and s is not sys.stderr:
+            continue
+        try:
+            devnull = os.open(os.devnull, os.O_WRONLY)
+            os.dup2(devnull, s.fileno())
+        except (AttributeError, OSError, ValueError):
+            pass
 
 
 def run_lines(engine: Engine, commands: Iterable[str], as_json: bool = False,
@@ -94,17 +123,23 @@ def run_lines(engine: Engine, commands: Iterable[str], as_json: bool = False,
             continue
         if not emit(engine.run(text), as_json, quiet, out, err):
             code = 1
-    return code
+    return 0 if _PIPE_CLOSED else code
 
 
 def repl(engine: Engine, as_json: bool = False, quiet: bool = False,
          out: TextIO | None = None, err: TextIO | None = None) -> int:
     """Interactive headless prompt until EOF / ``exit``. Returns an exit code."""
+    global _PIPE_CLOSED
     out = out if out is not None else sys.stdout
     err = err if err is not None else sys.stderr
-    if not quiet:
-        print(BANNER, file=out)
-        print(f"Working folder: {engine.root}", file=out)
+    try:
+        if not quiet:
+            print(BANNER, file=out)
+            print(f"Working folder: {engine.root}", file=out)
+    except BrokenPipeError:
+        _PIPE_CLOSED = True
+        silence_broken_pipe(out, err)
+        return 0
 
     while True:
         where = engine.current
@@ -122,13 +157,17 @@ def repl(engine: Engine, as_json: bool = False, quiet: bool = False,
                 out.flush()
                 line = sys.stdin.readline()
                 if line == "":                 # EOF
-                    print("", file=out)
+                    out.write("\n")
                     return 0
+        except BrokenPipeError:
+            _PIPE_CLOSED = True
+            silence_broken_pipe(out, err)
+            return 0
         except EOFError:
-            print("", file=out)
+            out.write("\n")
             return 0
         except KeyboardInterrupt:              # Ctrl-C clears the line
-            print("", file=out)
+            out.write("\n")
             continue
         text = line.strip()
         if not text:

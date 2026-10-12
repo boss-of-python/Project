@@ -18,7 +18,6 @@ Common options:
 from __future__ import annotations
 
 import argparse
-import sys
 
 from . import APP_NAME, __version__
 
@@ -88,19 +87,28 @@ def main(argv: list[str] | None = None) -> int:
     if a.commands or a.cli:
         from . import cli
         engine = cli.make_engine(root=a.root, cfg=cfg, use_llm=a.llm)
-        code = 0
-        if a.commands:
-            code = cli.run_lines(engine, a.commands, as_json=a.json, quiet=a.quiet)
-        if a.cli:
-            code = cli.repl(engine, as_json=a.json, quiet=a.quiet) or code
-        return code
+        try:
+            code = 0
+            if a.commands:
+                code = cli.run_lines(engine, a.commands, as_json=a.json, quiet=a.quiet)
+            if a.cli:
+                code = cli.repl(engine, as_json=a.json, quiet=a.quiet) or code
+            return code
+        except BrokenPipeError:
+            # the consumer (e.g. `| head -1`) closed the pipe — exit quietly
+            cli.silence_broken_pipe()
+            return 0
 
     # --------------------------------------------------------------- gui
     if a.root:
         cfg["root"] = a.root
     if a.no_tts:
         cfg["tts"] = False
-    config.save_config(cfg)
+    try:
+        config.save_config(cfg)
+    except OSError as e:
+        print(f"{APP_NAME}: warning: could not save settings ({e}); "
+              "they will not persist this run.")
 
     try:
         from .app import ThansApp
@@ -112,8 +120,17 @@ def main(argv: list[str] | None = None) -> int:
         print("  Headless machine? Use:  thans --cli   or   thans --run \"<command>\"")
         return 1
 
-    app = ThansApp(cfg=cfg, text_only=a.text_only)
-    app.run()
+    try:
+        app = ThansApp(cfg=cfg, text_only=a.text_only)
+        app.run()
+    except Exception as e:  # noqa: BLE001 — e.g. TclError "no display name"
+        if type(e).__name__ in ("TclError", "TclInitError") or "display" in str(e).lower():
+            print(f"{APP_NAME} could not open a display: {e}")
+            print("No graphical session available — run headless instead:")
+            print("  thans --cli                 interactive prompt")
+            print('  thans --run "list"          one-shot command')
+            return 1
+        raise
     return 0
 
 

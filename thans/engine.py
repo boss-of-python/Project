@@ -40,7 +40,7 @@ HELP_TEXT = """I can manage files & folders inside your working folder. Try:
   • delete <item>   → trash (say 'undo' to restore)
   • find <name>     • search for <ext> files   • find *.log
   • open <item>     • show in folder <item>
-  • organize <folder> [by extension|date]
+  • organize [folder] [by extension|type|date]
   • go to <folder>  ·  cd  (back to root)
   • undo    • help
 Everything stays inside the working folder; deletes go to .thans_trash."""
@@ -108,6 +108,9 @@ class Engine:
             ok, message, record = self._execute(cmd)
         except actions.UnsafePathError as e:
             return Result(False, f"Blocked for safety: {e}", desc, source)
+        except KeyError:
+            # e.g. a model reply that named an action but dropped its params
+            return Result(False, "That request is missing the file or folder name — say it again, or try 'help'.", desc, source)
         except (actions.NotFoundError, actions.AmbiguousError, ValueError) as e:
             return Result(False, f"Sorry: {e}", desc, source)
         except OSError as e:
@@ -207,7 +210,7 @@ class Engine:
             if a == "touch":
                 f = Path(rec["created"])
                 if f.is_file():
-                    t = actions.to_trash(self.root, f)
+                    actions.to_trash(self.root, f)
                     return True, f"Undid create: moved '{actions.rel(f, self.root)}' to trash.", None
                 return False, "That file is already gone — nothing to undo.", None
             if a == "organize":
@@ -229,7 +232,7 @@ class Engine:
             return False, f"I can't undo '{a}' automatically.", None
         except actions.UnsafePathError as e:
             return False, f"Blocked for safety: {e}", None
-        except (ValueError, OSError) as e:
+        except (KeyError, ValueError, OSError) as e:
             return False, f"Undo failed: {e}", None
         finally:
             self.last_record = None

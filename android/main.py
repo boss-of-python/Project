@@ -6,14 +6,21 @@ folder by stage_thans.sh).
 """
 import os
 import sys
+import traceback
 
 # make the staged core package + this app importable regardless of cwd
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 
 def main():
-    from thans_android.app import ThansAndroidApp
-    ThansAndroidApp().run()
+    try:
+        from thans_android.app import ThansAndroidApp
+        ThansAndroidApp().run()
+    except Exception:
+        # print into logcat for field debugging, then let the crash surface
+        print("THANS fatal error:", file=sys.stderr)
+        traceback.print_exc()
+        raise
 
 
 if __name__ == "__main__":

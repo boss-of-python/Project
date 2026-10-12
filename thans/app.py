@@ -651,12 +651,23 @@ class ThansApp:
             self.toast_bar.pack(fill="x", side="top")
         self._toast_ticks = 48  # ~2.2 seconds
 
+    # ------------------------------------------------------------ config
+    def _safe_save(self) -> None:
+        """Persist settings; a read-only config dir must never crash the UI."""
+        try:
+            config.save_config(self.cfg)
+        except OSError as e:
+            try:
+                self.show_toast(f"⚠ Could not save settings: {e}", "warn")
+            except Exception:  # noqa: BLE001
+                pass
+
     # ------------------------------------------------------------ theme & sidebar
     def toggle_theme(self) -> None:
         old_pal = dict(self.pal)
         self.theme_name = "light" if self.theme_name == "dark" else "dark"
         self.cfg["theme"] = self.theme_name
-        config.save_config(self.cfg)
+        self._safe_save()
         target_pal = animations.get_theme(self.theme_name)
 
         if not self.animations_on:
@@ -668,15 +679,20 @@ class ThansApp:
         steps = 6
 
         def step_fn(i: int) -> None:
-            t = animations.ease_in_out_sine(i / float(steps))
-            blended = {
-                k: animations.lerp_color(old_pal[k], target_pal[k], t)
-                for k in target_pal
-            }
-            self.pal = blended
-            self._apply_palette()
-            if i < steps:
-                self.root.after(22, lambda: step_fn(i + 1))
+            if self._closing:
+                return
+            try:
+                t = animations.ease_in_out_sine(i / float(steps))
+                blended = {
+                    k: animations.lerp_color(old_pal[k], target_pal[k], t)
+                    for k in target_pal
+                }
+                self.pal = blended
+                self._apply_palette()
+                if i < steps:
+                    self.root.after(22, lambda: step_fn(i + 1))
+            except Exception:  # noqa: BLE001 — window may be mid-destroy
+                return
 
         step_fn(1)
         self.show_toast(f"Switched to {self.theme_name.title()} theme", "info")
@@ -745,7 +761,7 @@ class ThansApp:
     def toggle_sidebar(self) -> None:
         self.sidebar_open = not self.sidebar_open
         self.cfg["sidebar"] = self.sidebar_open
-        config.save_config(self.cfg)
+        self._safe_save()
         if self.sidebar_open:
             self.sidebar.pack(side="right", fill="y", padx=(10, 0))
             self.sidebar.pack_propagate(False)
@@ -1144,7 +1160,7 @@ class ThansApp:
         if not d:
             return
         self.cfg["root"] = d
-        config.save_config(self.cfg)
+        self._safe_save()
         self.engine.set_root(d)
         self._refresh_workspace(animate_diff=False)
         self._set_status(f"working folder: {d}")
@@ -1320,7 +1336,11 @@ class ThansApp:
             cfg["use_llm"] = bool(var_llm.get())
             cfg["llm_model"] = var_llm_model.get().strip() or cfg.get("llm_model", "")
             cfg["permanent_delete"] = bool(var_perm.get())
-            config.save_config(cfg)
+            try:
+                config.save_config(cfg)
+            except OSError as e:
+                self.show_toast(f"⚠ Could not save settings: {e}", "err")
+                return
             self.cfg = cfg
             self.animations_on = cfg["animations"]
             self.engine = Engine(cfg["root"], cfg)

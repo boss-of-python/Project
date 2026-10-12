@@ -39,6 +39,8 @@ class _FakeKivyWidget:
         self.scroll_y = 1.0
         self.children: list[_FakeKivyWidget] = []
         self.bindings: dict[str, list] = {}
+        # every real Kivy widget exposes .ids (empty unless declared in KV)
+        self.ids = _FakeIds({})
 
     def add_widget(self, widget, index=0):
         self.children.insert(index, widget)

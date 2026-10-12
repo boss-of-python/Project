@@ -74,10 +74,18 @@ class ThansAndroidApp(App):
 
     def build(self):
         kv = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "thans.kv")
-        loaded = Builder.load_file(kv)
-        # Support both real Kivy (load_file returns root) and any legacy test shim
-        if loaded is None and hasattr(Builder, "get_root"):
-            loaded = Builder.get_root()
+        try:
+            loaded = Builder.load_file(kv)
+            # Support both real Kivy (load_file returns root) and any legacy test shim
+            if loaded is None and hasattr(Builder, "get_root"):
+                loaded = Builder.get_root()
+        except Exception as e:  # noqa: BLE001 — a broken KV must not kill the app
+            print(f"THANS: failed to load layout ({kv}): {e}")
+            loaded = None
+        if loaded is None:
+            # Minimal fallback so the app still boots (and the error is visible)
+            loaded = Label(text="THANS could not load its interface.\nCheck logcat for details.",
+                           halign="left", valign="middle", size_hint=(1, 1))
         self._root = loaded
 
         # Guarantees a writable folder (Android: the app's internal files dir;
@@ -112,7 +120,9 @@ class ThansAndroidApp(App):
         return self._root.ids
 
     def _set_status(self, text: str) -> None:
-        self._ids().status.text = text
+        ids = self._ids()
+        if "status" in ids:
+            ids.status.text = text
 
     def _apply_theme(self, name: str) -> None:
         self.theme_name = name
@@ -227,8 +237,8 @@ class ThansAndroidApp(App):
     def _add(self, who: str, text: str, kind_or_color="sys") -> None:
         kind = kind_or_color if isinstance(kind_or_color, str) else "sys"
         self.chat_records.insert(0, (who, text, kind))
-        if self.active_tab != "chat":
-            return
+        if self.active_tab != "chat" or "chat_box" not in self._ids():
+            return  # chat box absent (e.g. layout-fallback screen)
         box = self._ids().chat_box
         lbl = self._make_chat_label(who, text, kind, animate=True)
         # Support both standard Kivy BoxLayout.add_widget and any mock list shim
@@ -450,7 +460,8 @@ class ThansAndroidApp(App):
         self.mic_active = False
         self.sonic_state = "idle"
         self.sonic_level = 0.0
-        self._ids().btn_mic.text = "🎤 MIC"
+        if "btn_mic" in self._ids():
+            self._ids().btn_mic.text = "🎤 MIC"
         if text:
             self._set_status(f"🎙 heard: {text}")
             self._add("You (voice)", text, "you")

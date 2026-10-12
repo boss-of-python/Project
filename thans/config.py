@@ -79,6 +79,13 @@ def save_config(cfg: dict[str, Any]) -> None:
 
 
 def resolve_root(raw: str | Path) -> Path:
-    """Expand + resolve a user-supplied working root."""
-    p = Path(str(raw).strip()).expanduser()
+    """Expand + resolve a user-supplied working root.
+
+    Degrades to the home directory for empty or null-byte-laden input
+    (which would otherwise raise ValueError from the OS layer).
+    """
+    s = str(raw).strip()
+    if not s or "\0" in s:
+        s = str(Path.home())
+    p = Path(s).expanduser()
     return p.resolve()
