@@ -52,6 +52,17 @@ jobs:
           ./stage_thans.sh
           buildozer android debug
 
+      - name: Show why the build failed
+        if: failure()
+        run: |
+          echo "===== buildozer / python-for-android logs ====="
+          for f in $(find android/.buildozer -name "build.log" -type f 2>/dev/null | head -3); do
+            echo "----- $f (last 250 lines) -----"
+            tail -n 250 "$f"
+          done
+          echo "----- last 120 lines of the plain build output -----"
+          find android/.buildozer -name "*.log" -newer android/buildozer.spec -type f 2>/dev/null | head -5
+
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
