@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "thans"
+version = "0.1.0"
+description = "THANS - fully offline voice & text file assistant (tkinter)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "THANS" }]
+keywords = ["offline", "assistant", "voice", "files", "tkinter"]
+dependencies = [
+    "vosk>=0.3.45",
+    "sounddevice>=0.4.6",
+    "numpy>=1.24",
+    "pyttsx3>=2.90",
+]
+
+[project.optional-dependencies]
+llm = ["llama-cpp-python>=0.2.90"]
+build = ["pyinstaller>=6.3"]
+
+[project.scripts]
+thans = "thans.__main__:main"
+
+[tool.setuptools]
+packages = ["thans", "thans.actions"]

@@ -1,0 +1,2 @@
+# --- Only needed when building the installer ----------------------------
+pyinstaller>=6.3
