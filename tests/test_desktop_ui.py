@@ -261,14 +261,18 @@ class TestDesktopUI(unittest.TestCase):
         self.app.toggle_sidebar()
         self.assertTrue(self.app.sidebar_open)
 
+    def _wait_and_poll(self):
+        deadline = time.time() + 2.0
+        while time.time() < deadline:
+            if any(item[0] == "after_action" for item in list(self.app._q.queue)):
+                break
+            time.sleep(0.01)
+        self.app._poll()
+
     def test_command_execution_and_diff_highlight(self):
         self.app.entry.insert(0, "create folder ideas")
         self.app._on_enter()
-        # Wait briefly for worker thread to queue results
-        deadline = time.time() + 2.0
-        while time.time() < deadline and not (self.tmp / "ideas").is_dir():
-            time.sleep(0.02)
-        self.app._poll()
+        self._wait_and_poll()
         self.assertTrue((self.tmp / "ideas").is_dir())
         self.assertIn("ideas", self.app._highlight_names)
         self.assertGreater(self.app._highlight_step, 0)
@@ -279,10 +283,7 @@ class TestDesktopUI(unittest.TestCase):
         # Select 'work' folder (index 0) and double-click to navigate into it
         self.app.file_list._sel = (0,)
         self.app._on_file_double_click()
-        deadline = time.time() + 2.0
-        while time.time() < deadline and self.app.engine.current != (self.tmp / "work").resolve():
-            time.sleep(0.02)
-        self.app._poll()
+        self._wait_and_poll()
         self.assertEqual(self.app.engine.current, (self.tmp / "work").resolve())
         self.assertTrue(self.app.snapshot.can_go_up)
 

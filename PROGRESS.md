@@ -10,8 +10,8 @@ with an optional small offline LLM for free-form phrasing.
 Desktop build = tkinter UI (steps 1–50). Android build = Kivy UI reusing the same
 pure-Python core (steps 51–60).
 
-**Last update:** 2026-10-12 — Phase 11 complete (Minimalistic Desktop UI/UX + 60fps sonic canvas + live file workspace + intent preview); starting Phase 12 (Android APK Kivy UI/UX)
-**Current position:** STEP 78 / 85 — Phase 11 complete; Phase 12 in progress
+**Last update:** 2026-10-12 — Phase 12 complete (all 85 steps complete: Desktop & Android minimalistic UI/UX, 60fps animations, live workspace inspector, intent preview, and full test suite)
+**Current position:** STEP 85 / 85 — All phases complete (68/68 tests passing)
 **Resume rule:** do the first unchecked step; do not skip ahead; commit + push after each phase.
 
 Legend: ⬜ not started · 🚧 in progress · ✅ done
@@ -134,13 +134,13 @@ Legend: ⬜ not started · 🚧 in progress · ✅ done
 
 ## Phase 12 — Impressive Minimalistic Android APK UI/UX (steps 79–85)
 
-- [ ] 79. Modern minimalistic Kivy layout (`android/thans.kv`) with rounded card surfaces (`RoundedRectangle`), elevation, dark/light theme support, and responsive `dp`/`sp` scaling
-- [ ] 80. Animated **Sonic Wave & Status Header** with interactive **Breadcrumb Path Bar** (`⬆ Up` + current folder pill) and **Trash/Undo** quick action
-- [ ] 81. Touch-intuitive **Segmented View (`💬 Assistant` | `📁 Files`)** so mobile users can both chat and visually browse/tap folders & files offline
-- [ ] 82. **Live Intent Preview Pill** + horizontal scrollable **Quick-Action Chips** (`📁 List`, `➕ Folder`, `📝 File`, `✨ Organize`, `🔍 Find`, `↩ Undo`, `❓ Help`) for effortless thumb-driven UX
-- [ ] 83. Smooth Kivy widget animations (`kivy.animation.Animation` for card fade/slide-in, button press feedback, sonic wave bars, and file change highlights)
-- [ ] 84. Headless Android Kivy test suite (`tests/test_android_ui.py`) validating real KV parsing, widget tree build, view switching, animations, live preview, and end-to-end command sessions
-- [ ] 85. Final documentation polish (`README.md`, `android/README.md`, `PROGRESS.md`), full test run, commit & push
+- [x] 79. Modern minimalistic Kivy layout (`android/thans.kv`) with rounded card surfaces (`RoundedRectangle`), elevation, dark/light theme support, and responsive `dp`/`sp` scaling
+- [x] 80. Animated **Sonic Wave & Status Header** with interactive **Breadcrumb Path Bar** (`⬆ Up` + current folder pill) and **Trash/Undo** quick action
+- [x] 81. Touch-intuitive **Segmented View (`💬 Assistant` | `📁 Files`)** so mobile users can both chat and visually browse/tap folders & files offline
+- [x] 82. **Live Intent Preview Pill** + horizontal scrollable **Quick-Action Chips** (`📁 List`, `➕ Folder`, `📝 File`, `✨ Organize`, `🔍 Find`, `⚡ Complete`, `↩ Undo`, `❓ Help`) for effortless thumb-driven UX
+- [x] 83. Smooth Kivy widget animations (`kivy.animation.Animation` for card fade/slide-in, button press feedback, sonic wave bars, and file change highlights)
+- [x] 84. Headless Android Kivy test suite (`tests/test_android_ui.py`) validating real KV parsing, widget tree build, view switching, animations, live preview, and end-to-end command sessions
+- [x] 85. Final documentation polish (`README.md`, `android/README.md`, `PROGRESS.md`), full test run (68/68), commit & push
 
 ---
 
@@ -162,6 +162,7 @@ Legend: ⬜ not started · 🚧 in progress · ✅ done
 | 2026-10-12 | 61–65 | Phase 9: Fixed Android/Desktop runtime calls, runtime mic permissions, `undo` for `organize`, `cd ..`, and APK CI dependencies/caching. |
 | 2026-10-12 | 66–70 | Phase 10: Shared UX intelligence (`thans/ui_helpers.py`) + 60fps animation & theme engine (`thans/animations.py`) + 11 unit tests. |
 | 2026-10-12 | 71–78 | Phase 11: Minimalistic Desktop UI/UX (`thans/app.py`) with 60fps Sonic Visualizer, Live File Workspace Sidebar, Breadcrumb Bar, Live Intent Preview, Quick Chips, Theme cross-fade, and headless Desktop UI tests. |
+| 2026-10-12 | 79–85 | Phase 12: Minimalistic Android APK UI/UX (`android/thans.kv` & `android/thans_android/app.py`) with rounded cards, Sonic Wave equalizer, Dual-Tab (`💬 Chat` + `📁 Files`), Live Intent Preview, Quick Chips + `⚡ Complete`, and headless Android UI tests (68/68 total tests green). |
 
 ## Known decisions (so future sessions don't re-litigate)
 
