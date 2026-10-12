@@ -16,36 +16,32 @@ jobs:
     timeout-minutes: 90
     permissions:
       contents: write
+    # Official Kivy image: buildozer + JDK 17 + full toolchain preinstalled,
+    # so we skip the apt-get/pip setup steps (saves ~4-7 min per run).
+    container:
+      image: kivy/buildozer:latest
+      options: --user root
+    env:
+      # Buildozer stores SDK/NDK under $HOME/.buildozer — pin HOME so the
+      # actions/cache path below is deterministic.
+      HOME: /home/user
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
-          cache: "pip"
+          fetch-depth: 0  # auto-commit step rebases & pushes the built APK
 
-      - name: Cache Buildozer global directory
+      - name: Cache Buildozer global directory (Android SDK + NDK + p4a)
         uses: actions/cache@v4
         with:
-          path: ~/.buildozer
-          key: buildozer-sdk-${{ runner.os }}-ubuntu2204-api33-v2
-
-      - name: Install system deps + buildozer
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            git zip unzip openjdk-17-jdk \
-            autoconf automake libtool libtool-bin pkg-config \
-            cmake build-essential ccache patch lld \
-            libffi-dev libssl-dev zlib1g-dev \
-            libncurses-dev libncurses5-dev libncursesw5-dev libtinfo5 python3-pip
-          python -m pip install --upgrade pip "setuptools<70" wheel virtualenv
-          python -m pip install "cython==0.29.36" buildozer
+          path: /home/user/.buildozer
+          key: bz-p4a-${{ runner.os }}-container-v1
+          restore-keys: |
+            bz-p4a-${{ runner.os }}-container-v1
 
       - name: Run core & UI test suite
-        run: python -m thans --selftest
+        run: /home/user/.venv/bin/python -m thans --selftest
 
       - name: Stage core package and build debug APK
         working-directory: android
