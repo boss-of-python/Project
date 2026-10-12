@@ -22,19 +22,30 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: "pip"
+
+      - name: Cache Buildozer global directory
+        uses: actions/cache@v4
+        with:
+          path: ~/.buildozer
+          key: buildozer-sdk-${{ runner.os }}-api33-v1
 
       - name: Install system deps + buildozer
         run: |
           sudo apt-get update
-          sudo apt-get install -y git zip unzip openjdk-17-jdk \
-            autoconf libtool pkg-config python3-pip
-          python -m pip install --upgrade pip
-          pip install buildozer cython
+          sudo apt-get install -y \
+            git zip unzip openjdk-17-jdk \
+            autoconf automake libtool pkg-config \
+            cmake build-essential ccache patch lld \
+            libffi-dev libssl-dev zlib1g-dev \
+            libncurses-dev libtinfo6 python3-pip
+          python -m pip install --upgrade pip setuptools wheel virtualenv
+          python -m pip install "cython<3" buildozer
 
-      - name: Run core test suite
+      - name: Run core & UI test suite
         run: python -m thans --selftest
 
-      - name: Build debug APK
+      - name: Stage core package and build debug APK
         working-directory: android
         run: |
           chmod +x stage_thans.sh

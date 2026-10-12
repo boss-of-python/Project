@@ -16,16 +16,27 @@ THANS: Moved 23 files into 4 folders in 'downloads'.
 
 | Layer | Technology | Model size | Internet? |
 |-------|-----------|-----------|-----------|
-| Speech → text | **Vosk** (small EN-US model) | ≈ 40 MB | only to download once |
+| Speech → text | **Vosk** (small EN-US model, live partial + RMS level) | ≈ 40 MB | only to download once |
 | Text → speech | **pyttsx3** (OS voices: SAPI5 / NSSpeech / espeak) | 0 MB | never |
-| Command parsing | **Rule parser** (instant, zero deps) — always on | 0 MB | never |
+| Command parsing | **Rule parser + Live Intent Preview** (instant, zero deps) | 0 MB | never |
 | Free-form parsing | **Optional tiny LLM** via llama.cpp (GGUF in `models/`) | ≈ 408 MB default | only to download once |
-| UI | **tkinter** (Python standard library) | 0 MB | never |
+| Desktop UI | **tkinter** (60fps Sonic Visualizer, Live File Sidebar, Dark/Light themes) | 0 MB | never |
+| Android UI | **Kivy** (Animated cards, Sonic Wave bar, Chat + Visual File Explorer tabs) | 0 MB | never |
 
 The rule parser handles **every command in the reference below** without any
 model, so the app is fully functional even before models are downloaded.
 The small LLM (default **Qwen2.5-0.5B-Instruct Q4_K_M**) is optional sugar for
 loose phrasing — it is switched off by default and can be enabled in Settings.
+
+## Minimalistic UI, UX & Animations (Desktop & Android)
+
+* **60fps Sonic Visualizer:** Multi-ribbon sine wave + breathing orb in the header that dynamically responds to **Idle**, **Listening** (live microphone RMS amplitude), **Thinking**, **Speaking**, and **Success/Error** states.
+* **Real-Time Intent Preview Pill:** As you type, THANS previews the exact parsed action (`📁+ Create folder 'work'`, `♻️ Delete 'todo.txt' · moves to .thans_trash`) before you even press Enter.
+* **Smart Autocomplete (`Tab` / `⚡ Complete`):** Completes command starters (`cre` → `create folder `) and live filenames from the active folder.
+* **Live File Workspace Inspector & Diff Pulse:** Interactive split-pane sidebar (Desktop) and `📁 Files` tab (Android) with instant filtering, smart file-type icons, human-readable sizes, double-click navigation, and an **animated emerald highlight pulse** on newly created or modified items.
+* **Interactive Breadcrumbs & Quick-Action Chips:** Navigate folders via clickable breadcrumbs (`🏠 root › work › reports` or `⬆ Up`) and trigger common actions (`📁 List`, `➕ Folder`, `📝 File`, `✨ Organize`, `🔍 Find`, `↩ Undo`, `❓ Help`) with one tap.
+* **Curated Dark & Light Themes:** Smooth cross-fade transition (`☀️ / 🌙` or `Ctrl+T`).
+* **Keyboard Shortcuts (Desktop):** `Ctrl+K` focus input · `Tab` autocomplete · `Ctrl+Z` undo · `Ctrl+B` toggle file sidebar · `Ctrl+T` toggle theme · `Ctrl+L` clear chat · `F2` toggle voice mic.
 
 ## Quick start
 

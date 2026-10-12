@@ -137,8 +137,12 @@ RULES: list[tuple[str, re.Pattern, Callable[[re.Match], Optional[dict]]]] = [
      re.compile(r"^(?:cd|home|go home|back to (?:root|home|start|top))$"),
      lambda m: {"action": "cd", "params": {"path": "~"}}),
 
+    ("cd-up",
+     re.compile(r"^(?:up|go up|go back|back|parent|parent folder|cd \.\.)$"),
+     lambda m: {"action": "cd", "params": {"path": ".."}}),
+
     ("cd",
-     re.compile(r"^(?:go to |go into |navigate to |cd to |cd |change (?:the )?working folder to |change folder to |set folder to |switch to folder)(?P<p>.+)$"),
+     re.compile(r"^(?:go to |go into |navigate to |cd to |cd |change (?:the )?working folder to |change folder to |set folder to |switch to folder )(?P<p>.+)$"),
      lambda m: {"action": "cd", "params": {"path": _name(m["p"])}}),
 
     ("open",

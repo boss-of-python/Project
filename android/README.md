@@ -6,11 +6,14 @@ The **same offline assistant** on your phone: the exact same `thans` core
 | Capability | Android | Notes |
 |---|---|---|
 | Text commands (full set) | ✅ always | offline, zero models |
-| Voice input (MIC button) | ⚠️ best-effort | uses the device's speech service (Android `SpeechRecognizer`); fully offline only if the device has an offline voice pack (Google: *Settings → Google → Offline voice*) |
-| Spoken replies (SPEAK) | ✅ | system TextToSpeech |
+| Live Intent Preview & `⚡ Complete` | ✅ always | real-time action badge & filename autocomplete as you type |
+| Dual-Tab UI (`💬 Chat` + `📁 Files`) | ✅ always | animated chat cards + visual touch file explorer with one-tap `♻️` trash |
+| Sonic Wave Visualizer & Themes | ✅ always | animated equalizer bar (reacts to mic RMS & state) + Dark/Light themes (`☀️/🌙`) |
+| Voice input (`🎤 MIC` button) | ⚠️ best-effort | uses Android `SpeechRecognizer` (with runtime mic permission & live partial transcript); fully offline if the device has an offline voice pack (*Settings → Google → Offline voice*) |
+| Spoken replies (`SPEAK`) | ✅ | system TextToSpeech |
 | Working folder | app's private storage | `os.getcwd()` (P4A files dir) — the only storage Android apps may manage without broad permissions |
 | LLM free-form parsing | ❌ | desktop-only (no llama.cpp NDK recipe); the rule parser covers every documented command, so nothing essential is lost |
-| Delete-to-trash / undo | ✅ | trash lives in the app folder |
+| Delete-to-trash / undo | ✅ | trash lives in the app folder; reversible via `↩ Undo` (including `organize`) |
 
 ## Get the APK — option A: GitHub Actions (no local tools)
 

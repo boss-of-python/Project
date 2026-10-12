@@ -154,6 +154,27 @@ class TestEngineSearchOrganize(EngineTestBase):
         self.assertTrue((w / "txt" / "a.txt").is_file())
         self.assertTrue((w / "md" / "c.md").is_file())
         self.assertTrue((w / "other" / "noext").is_file())
+        # Undo organize should restore files and remove empty category dirs
+        u = self.say("undo")
+        self.assertTrue(u.ok, u.message)
+        self.assertTrue((w / "a.txt").is_file())
+        self.assertTrue((w / "c.md").is_file())
+        self.assertFalse((w / "txt").exists())
+
+    def test_cd_up(self):
+        (self.tmp / "work" / "sub").mkdir()
+        self.say("go to work/sub")
+        self.assertEqual(self.eng.current, (self.tmp / "work" / "sub").resolve())
+        r = self.say("go back")
+        self.assertTrue(r.ok, r.message)
+        self.assertEqual(self.eng.current, (self.tmp / "work").resolve())
+        r2 = self.say("up")
+        self.assertTrue(r2.ok, r2.message)
+        self.assertEqual(self.eng.current, self.eng.root)
+        # Going up at root stays safely at root
+        r3 = self.say("go up")
+        self.assertTrue(r3.ok, r3.message)
+        self.assertEqual(self.eng.current, self.eng.root)
 
     def test_organize_by_date(self):
         w = self.tmp / "work"
