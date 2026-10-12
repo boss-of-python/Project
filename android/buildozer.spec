@@ -8,7 +8,7 @@ version = 0.1.0
 
 # Android needs only pure-Python core + Kivy UI + pyjnius for the (optional)
 # on-device speech/TTS bridge. No vosk/sounddevice/pyttsx3 — those are desktop-only.
-requirements = python3==3.11,kivy,pyjnius
+requirements = python3,kivy,pyjnius
 
 orientation = portrait
 fullscreen = 0

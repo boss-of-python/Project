@@ -10,8 +10,8 @@ with an optional small offline LLM for free-form phrasing.
 Desktop build = tkinter UI (steps 1–50). Android build = Kivy UI reusing the same
 pure-Python core (steps 51–60).
 
-**Last update:** 2026-10-12 — Android port (Phase 8) complete; desktop merged to main as PR #1
-**Current position:** STEP 60 / 60 — desktop on main, Android project in PR #2
+**Last update:** 2026-10-12 — Phases 9–12 complete: CI/APK fixes, shared UX & animation engine, desktop & Android UI/UX redesign (59/59 tests pass)
+**Current position:** STEP 80 / 80 — All phases complete
 **Resume rule:** do the first unchecked step; do not skip ahead; commit + push after each phase.
 
 Legend: ⬜ not started · 🚧 in progress · ✅ done
@@ -105,6 +105,38 @@ Legend: ⬜ not started · 🚧 in progress · ✅ done
 - [x] 59. `android/README.md` — how to get the APK (Actions or local buildozer), capability matrix, limits
 - [x] 60. Core suite still green (45/45), committed + pushed, PR #2 opened for `main`
 
+## Phase 9 — Finish & stabilize previous Android/CI work (steps 61–65)
+
+- [x] 61. Fix `android/buildozer.spec` (`python3` recipe without invalid `==3.11` pin) and `android/stage_thans.sh` (`-prune`)
+- [x] 62. Fix `.github/workflows/build-apk.yml` system & Python dependencies for reliable buildozer APK builds (`cython<3`, `virtualenv`, `setuptools`, NDK/autotools libs)
+- [x] 63. Fix Kivy runtime bugs in `android/thans.kv` and `android/thans_android/app.py` (`Builder.load_file` return root, `add_widget`, `scroll_y`, valid Kivy canvas properties)
+- [x] 64. Add automated tests (`tests/test_ux_and_android.py`) verifying Android KV loading, widget instantiation, and full Kivy session flow
+- [x] 65. Verify all existing + new Android stabilization tests pass
+
+## Phase 10 — Shared UX engine, natural commands & multi-step undo (steps 66–70)
+
+- [x] 66. Expand `thans/parser_rules.py` & `thans/engine.py`: natural navigation (`go back`/`up`, `where am i`/`pwd`, `status`), file preview (`read`/`preview <file>`), trash inspection (`show trash`, `empty trash`), and multi-step undo stack
+- [x] 67. Create `thans/ux.py`: shared pure-Python UX helpers (color interpolation, easing curves, waveform math, workspace snapshot, breadcrumb builder, file icons/sizes, live intent preview, smart autocomplete & quick-action suggestions)
+- [x] 68. Add unit tests for new commands, multi-step undo, live intent preview, autocomplete, and animation math
+- [x] 69. Update `README.md` & `android/README.md` command references with the expanded capabilities
+- [x] 70. Commit Phase 9 & 10 progress and update `PROGRESS.md`
+
+## Phase 11 — Impressive Desktop (Windows/Linux tkinter) UI, UX & Animations (steps 71–75)
+
+- [x] 71. Redesign `thans/app.py` with a sleek minimalist dark/midnight/light theme system, custom hover buttons, and 60 FPS animation loop
+- [x] 72. Add animated header voice/activity orb & real-time acoustic waveform / shimmer canvas + status glow transitions
+- [x] 73. Build interactive collapsible Workspace Explorer sidebar (clickable breadcrumb bar, live folder contents with icons/sizes, double-click navigate/preview, right-click context menu, animated item highlight, trash pill)
+- [x] 74. Add Live Intent Preview bar, `Tab` autocomplete, contextual Quick-Action pills, typewriter message reveal, and `Ctrl+K` Command Palette modal
+- [x] 75. Update `PROGRESS.md` after Desktop UI/UX completion
+
+## Phase 12 — Impressive Android (APK Kivy) UI, UX & Animations (steps 76–80)
+
+- [x] 76. Redesign `android/thans.kv` with minimalist rounded cards, canvas-drawn surfaces, animated voice wave indicator, and touch-first layout
+- [x] 77. Upgrade `android/thans_android/app.py` with Kivy `Animation` transitions (smooth card fade-in, pulsing mic/activity wave, button press feedback)
+- [x] 78. Add interactive touch Breadcrumb Bar, collapsible live File/Folder Chip Explorer drawer (tap folder to enter, tap file to preview/act), and Live Intent Preview bar
+- [x] 79. Add scrollable touch Quick-Action chip carousel (`List`, `+Folder`, `+File`, `Organize`, `Find`, `Preview`, `Undo`, `Trash`, `Up`, `Help`)
+- [x] 80. Run full test suite (`python -m thans --selftest`) + real Kivy headless validation, update `PROGRESS.md`, commit & push
+
 ---
 
 ## Changelog
@@ -122,6 +154,10 @@ Legend: ⬜ not started · 🚧 in progress · ✅ done
 | 2026-10-12 | 48–50 | Phase 7: PyInstaller build script, Windows (Inno Setup) + Linux installers. Full suite green. |
 | 2026-10-12 | 51 | Desktop build merged to `main` (PR #1) — now visible in the repo. |
 | 2026-10-12 | 52–60 | Phase 8: Android (Kivy) port reusing the core; headless-validated; CI builds the APK artifact. PR #2 opened. |
+| 2026-10-12 | 61–65 | Phase 9: Fixed Android buildozer spec (`python3` recipe), CI APK dependencies, and Kivy runtime bindings (`Builder.load_file`, `add_widget`, `scroll_y`, canvas surfaces). |
+| 2026-10-12 | 66–70 | Phase 10: Added `thans/ux.py`, file preview (`read`), trash management (`show/empty trash`), `go back`/`status`, and multi-step undo stack (incl. `organize` undo). |
+| 2026-10-12 | 71–75 | Phase 11: Redesigned Desktop UI (`thans/app.py`) with 60 FPS animated wave/orb canvas, 3 themes (Obsidian/Midnight/Daylight), live Explorer sidebar, breadcrumbs, live intent preview, Tab autocomplete, and `Ctrl+K` Command Palette. |
+| 2026-10-12 | 76–80 | Phase 12: Redesigned Android Kivy UI (`android/thans.kv`, `thans_android/app.py`) with smooth Kivy animations, collapsible touch File Explorer strip, live intent preview, one-tap autocomplete, and quick-action chip carousel. 59/59 tests pass. |
 
 ## Known decisions (so future sessions don't re-litigate)
 

@@ -10,7 +10,9 @@ The **same offline assistant** on your phone: the exact same `thans` core
 | Spoken replies (SPEAK) | ✅ | system TextToSpeech |
 | Working folder | app's private storage | `os.getcwd()` (P4A files dir) — the only storage Android apps may manage without broad permissions |
 | LLM free-form parsing | ❌ | desktop-only (no llama.cpp NDK recipe); the rule parser covers every documented command, so nothing essential is lost |
-| Delete-to-trash / undo | ✅ | trash lives in the app folder |
+| Delete-to-trash / multi-step undo | ✅ | trash lives in the app folder; `undo` reverses create/move/copy/rename/delete/organize |
+| Live File Chips & Quick Actions | ✅ | tap folders to navigate, tap files to preview text, tap quick chips or `⇥ Complete` |
+| Smooth Kivy Animations | ✅ | animated voice/status wave header, smooth chat card fade-ins, collapsible `FILES` drawer |
 
 ## Get the APK — option A: GitHub Actions (no local tools)
 

@@ -8,7 +8,7 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from .common import NotFoundError, find_item, rel, safe_path, to_trash
+from .common import NotFoundError, find_item, rel, safe_path, to_trash, trash_dir
 
 
 def _dest_path(root: Path, current: Path, dest: str, s: Path) -> Path:
@@ -139,3 +139,76 @@ def delete_item(root: Path, current: Path, path: str, permanent: bool = False):
     t = to_trash(root, p)
     return (True, f"Moved '{label}' to trash (.thans_trash). Say 'undo' to bring it back.",
             {"action": "delete", "original": str(p), "trashed": str(t), "permanent": False})
+
+
+# --------------------------------------------------------------------------
+# preview / trash / status
+# --------------------------------------------------------------------------
+
+
+def read_file_preview(root: Path, current: Path, path: str, max_chars: int = 2400):
+    p = find_item(current, path)
+    if p.is_dir():
+        return list_dir(root, current, path)
+    label = rel(p, root)
+    try:
+        raw = p.read_bytes()
+    except OSError as e:
+        raise OSError(f"could not read '{label}': {e}") from e
+    size = len(raw)
+    if not size:
+        return True, f"📄 '{label}' is empty (0 B).", None
+    if b"\x00" in raw[:512]:
+        return True, f"📄 '{label}' is a binary file ({size} bytes) — say 'open {p.name}' to open it.", None
+    text = raw.decode("utf-8", errors="replace")
+    lines = text.splitlines()
+    snippet = text[:max_chars].rstrip("\n")
+    more = f"\n… (truncated, {size} bytes total)" if len(text) > max_chars else ""
+    header = f"📄 {label} ({len(lines)} line{'s' if len(lines) != 1 else ''}, {size} B):"
+    return True, f"{header}\n{snippet}{more}", None
+
+
+def manage_trash(root: Path, mode: str = "list"):
+    t = trash_dir(root)
+    if not t.is_dir():
+        return True, "Trash (.thans_trash) is empty.", None
+    items = sorted(t.iterdir(), key=lambda p: p.name, reverse=True)
+    if not items:
+        return True, "Trash (.thans_trash) is empty.", None
+    if mode == "empty":
+        count = len(items)
+        for item in items:
+            if item.is_dir():
+                shutil.rmtree(item, ignore_errors=True)
+            else:
+                try:
+                    item.unlink()
+                except OSError:
+                    pass
+        return True, f"Emptied trash ({count} item{'s' if count != 1 else ''} removed).", None
+    lines = [f"🗑 Trash contains {len(items)} item{'s' if len(items) != 1 else ''}:"]
+    for item in items[:20]:
+        orig_name = item.name.split("__", 1)[-1] if "__" in item.name else item.name
+        kind = "📁" if item.is_dir() else "📄"
+        lines.append(f"  {kind} {orig_name}  ({item.name})")
+    if len(items) > 20:
+        lines.append(f"  … and {len(items) - 20} more")
+    lines.append("Say 'undo' to restore the most recent action, or 'empty trash' to clear.")
+    return True, "\n".join(lines), None
+
+
+def workspace_status(root: Path, current: Path, undo_count: int = 0):
+    cur_rel = rel(current, root)
+    entries = [e for e in current.iterdir() if not e.name.startswith(".") and e.name != ".thans_trash"] if current.is_dir() else []
+    folders = sum(1 for e in entries if e.is_dir())
+    files = sum(1 for e in entries if e.is_file())
+    t = trash_dir(root)
+    trashed = len(list(t.iterdir())) if t.is_dir() else 0
+    return (
+        True,
+        f"📂 Current folder: '{cur_rel}' (inside root '{root.name or root}')\n"
+        f"   • {folders} folder{'s' if folders != 1 else ''}, {files} file{'s' if files != 1 else ''} here\n"
+        f"   • Trash: {trashed} item{'s' if trashed != 1 else ''}\n"
+        f"   • Undo stack: {undo_count} action{'s' if undo_count != 1 else ''} ready",
+        None,
+    )

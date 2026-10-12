@@ -1,92 +1,293 @@
 #:kivy 2.0
+#:import dp kivy.metrics.dp
+#:import sp kivy.metrics.sp
 
-Screen:
-    name: "thans"
+BoxLayout:
+    orientation: "vertical"
+    padding: dp(10)
+    spacing: dp(6)
+    canvas.before:
+        Color:
+            rgba: (0.05, 0.06, 0.08, 1)
+        Rectangle:
+            pos: self.pos
+            size: self.size
 
+    # 1. Top Header Card: Brand + Animated Wave Indicator + FILES & SPEAK Toggles
     BoxLayout:
-        orientation: "vertical"
-        padding: dp(8)
-        spacing: dp(6)
-        bgcolor: (0.08, 0.09, 0.11, 1)
+        size_hint_y: None
+        height: dp(48)
+        padding: [dp(12), dp(6)]
+        spacing: dp(8)
+        canvas.before:
+            Color:
+                rgba: (0.08, 0.10, 0.14, 1)
+            RoundedRectangle:
+                pos: self.pos
+                size: self.size
+                radius: [dp(12),]
 
-        # header
+        Label:
+            id: pulse_dot
+            text: "●"
+            font_size: sp(16)
+            color: (0.36, 0.55, 1.0, 1)
+            size_hint_x: None
+            width: dp(20)
+
         BoxLayout:
-            size_hint_y: 0.07
+            orientation: "vertical"
+            size_hint_x: 0.48
             Label:
-                text: "THANS · offline file assistant"
-                font_size: sp(14)
+                text: "THANS"
+                font_size: sp(15)
                 bold: True
-                color: (1, 1, 1, 1)
+                color: (0.93, 0.95, 0.98, 1)
                 halign: "left"
-                size_hint_x: 0.65
-            Button:
-                id: btn_speak
-                text: "SPEAK: OFF"
-                font_size: sp(11)
-                background_color: (0.2, 0.22, 0.27, 1)
-                on_release: app.toggle_speak()
+                valign: "bottom"
+                text_size: self.size
+            Label:
+                id: wave_label
+                text: "▁▂▃▄▃▂▁  offline"
+                font_size: sp(10)
+                color: (0.55, 0.60, 0.68, 1)
+                halign: "left"
+                valign: "top"
+                text_size: self.size
 
-        # status
+        Button:
+            id: btn_files
+            text: "FILES"
+            font_size: sp(11)
+            bold: True
+            size_hint_x: 0.26
+            background_normal: ""
+            background_color: (0.14, 0.18, 0.26, 1)
+            color: (0.85, 0.90, 1.0, 1)
+            on_release: app.toggle_files_drawer()
+
+        Button:
+            id: btn_speak
+            text: "SPEAK: OFF"
+            font_size: sp(11)
+            bold: True
+            size_hint_x: 0.26
+            background_normal: ""
+            background_color: (0.12, 0.15, 0.21, 1)
+            color: (0.65, 0.72, 0.82, 1)
+            on_release: app.toggle_speak()
+
+    # 2. Interactive Path / Breadcrumb & Status Strip
+    BoxLayout:
+        size_hint_y: None
+        height: dp(34)
+        spacing: dp(6)
+        padding: [dp(8), dp(2)]
+        canvas.before:
+            Color:
+                rgba: (0.07, 0.09, 0.12, 1)
+            RoundedRectangle:
+                pos: self.pos
+                size: self.size
+                radius: [dp(8),]
+
+        Button:
+            text: "🏠"
+            font_size: sp(13)
+            size_hint_x: None
+            width: dp(34)
+            background_normal: ""
+            background_color: (0.12, 0.15, 0.21, 1)
+            on_release: app.go_home()
+
+        Button:
+            id: btn_up
+            text: "⬆ Up"
+            font_size: sp(11)
+            size_hint_x: None
+            width: dp(48)
+            background_normal: ""
+            background_color: (0.12, 0.15, 0.21, 1)
+            color: (0.85, 0.90, 1.0, 1)
+            on_release: app.go_up()
+
         Label:
             id: status
-            size_hint_y: 0.06
-            halign: "center"
+            halign: "left"
             valign: "middle"
             font_size: sp(12)
-            color: (0.55, 0.6, 0.68, 1)
+            color: (0.62, 0.68, 0.78, 1)
             text: "starting…"
+            text_size: self.size
+            shorten: True
+            shorten_from: "left"
 
-        # chat (newest on top)
-        ScrollView:
-            id: chat_scroll
-            size_hint_y: 1
-            do_scroll_x: False
-            bar_width: 0
-            BoxLayout:
-                id: chat_box
-                orientation: "vertical"
-                size_hint_y: None
-                height: self.minimum_height
-                padding: dp(4)
-                spacing: dp(4)
-
-        # input row
+    # 3. Collapsible Touch File & Folder Explorer Drawer
+    ScrollView:
+        id: explorer_drawer
+        size_hint_y: None
+        height: dp(40)
+        do_scroll_x: True
+        do_scroll_y: False
+        bar_width: 0
+        canvas.before:
+            Color:
+                rgba: (0.08, 0.10, 0.14, 1)
+            RoundedRectangle:
+                pos: self.pos
+                size: self.size
+                radius: [dp(8),]
         BoxLayout:
-            size_hint_y: 0.11
+            id: explorer_box
+            orientation: "horizontal"
+            size_hint_x: None
+            width: self.minimum_width
+            padding: [dp(6), dp(4)]
             spacing: dp(6)
-            TextInput:
-                id: input
-                multiline: False
-                font_size: sp(15)
-                text_color: (1, 1, 1, 1)
-                foreground_color: (0.25, 0.85, 0.35, 1)
-                background_color: (0.13, 0.14, 0.17, 1)
-                hint_text: "type a command, e.g. 'create folder work'"
-                hint_foreground_color: (0.4, 0.44, 0.5, 1)
-                on_text_validate: app.send_input()
-            Button:
-                text: "SEND"
-                font_size: sp(13)
-                background_color: (0.31, 0.55, 1, 1)
-                on_release: app.send_input()
 
-        # action row
+    # 4. Main Chat Stream (newest on top for thumb-friendly reading)
+    ScrollView:
+        id: chat_scroll
+        size_hint_y: 1
+        do_scroll_x: False
+        bar_width: dp(3)
+        canvas.before:
+            Color:
+                rgba: (0.08, 0.10, 0.14, 1)
+            RoundedRectangle:
+                pos: self.pos
+                size: self.size
+                radius: [dp(12),]
         BoxLayout:
-            size_hint_y: 0.10
+            id: chat_box
+            orientation: "vertical"
+            size_hint_y: None
+            height: self.minimum_height
+            padding: dp(10)
             spacing: dp(6)
-            Button:
-                id: btn_mic
-                text: "MIC"
-                font_size: sp(12)
-                background_color: (0.2, 0.22, 0.27, 1)
-                on_release: app.toggle_mic()
-            Button:
-                text: "HELP"
-                font_size: sp(12)
-                background_color: (0.2, 0.22, 0.27, 1)
-                on_release: app.say_help()
-            Button:
-                text: "CLEAR"
-                font_size: sp(12)
-                background_color: (0.2, 0.22, 0.27, 1)
-                on_release: app.clear_chat()
+
+    # 5. Live Intent Preview & Autocomplete Hint Bar
+    BoxLayout:
+        size_hint_y: None
+        height: dp(28)
+        padding: [dp(10), dp(2)]
+        spacing: dp(6)
+        canvas.before:
+            Color:
+                rgba: (0.09, 0.12, 0.17, 1)
+            RoundedRectangle:
+                pos: self.pos
+                size: self.size
+                radius: [dp(6),]
+        Label:
+            id: intent_badge
+            text: "READY"
+            font_size: sp(10)
+            bold: True
+            size_hint_x: None
+            width: dp(68)
+            color: (0.36, 0.55, 1.0, 1)
+        Label:
+            id: intent_label
+            text: "Type a command or tap a quick action below"
+            font_size: sp(11)
+            halign: "left"
+            valign: "middle"
+            color: (0.62, 0.68, 0.78, 1)
+            text_size: self.size
+            shorten: True
+        Button:
+            id: btn_complete
+            text: "⇥ Complete"
+            font_size: sp(10)
+            size_hint_x: None
+            width: dp(78)
+            opacity: 0
+            disabled: True
+            background_normal: ""
+            background_color: (0.18, 0.25, 0.38, 1)
+            color: (0.85, 0.92, 1.0, 1)
+            on_release: app.apply_autocomplete()
+
+    # 6. Touch Quick-Action Carousel
+    ScrollView:
+        size_hint_y: None
+        height: dp(36)
+        do_scroll_x: True
+        do_scroll_y: False
+        bar_width: 0
+        BoxLayout:
+            id: quick_box
+            orientation: "horizontal"
+            size_hint_x: None
+            width: self.minimum_width
+            spacing: dp(6)
+            padding: [dp(2), dp(2)]
+
+    # 7. Command Input Row
+    BoxLayout:
+        size_hint_y: None
+        height: dp(46)
+        spacing: dp(6)
+        TextInput:
+            id: input
+            multiline: False
+            font_size: sp(15)
+            foreground_color: (0.93, 0.95, 0.98, 1)
+            background_color: (0.11, 0.14, 0.20, 1)
+            cursor_color: (0.36, 0.55, 1.0, 1)
+            padding: [dp(12), dp(11)]
+            hint_text: "Command, e.g. 'create folder work'"
+            hint_text_color: (0.42, 0.47, 0.56, 1)
+            on_text: app.on_input_change(self.text)
+            on_text_validate: app.send_input()
+        Button:
+            text: "SEND"
+            font_size: sp(13)
+            bold: True
+            size_hint_x: None
+            width: dp(76)
+            background_normal: ""
+            background_color: (0.36, 0.55, 1.0, 1)
+            color: (1, 1, 1, 1)
+            on_release: app.send_input()
+
+    # 8. Primary Bottom Action Row
+    BoxLayout:
+        size_hint_y: None
+        height: dp(44)
+        spacing: dp(6)
+        Button:
+            id: btn_mic
+            text: "🎙 MIC"
+            font_size: sp(12)
+            bold: True
+            background_normal: ""
+            background_color: (0.14, 0.18, 0.26, 1)
+            color: (0.93, 0.95, 0.98, 1)
+            on_release: app.toggle_mic()
+        Button:
+            id: btn_undo
+            text: "↶ UNDO"
+            font_size: sp(12)
+            bold: True
+            background_normal: ""
+            background_color: (0.12, 0.15, 0.21, 1)
+            color: (0.72, 0.78, 0.88, 1)
+            on_release: app.say_undo()
+        Button:
+            text: "❓ HELP"
+            font_size: sp(12)
+            bold: True
+            background_normal: ""
+            background_color: (0.12, 0.15, 0.21, 1)
+            color: (0.85, 0.90, 1.0, 1)
+            on_release: app.say_help()
+        Button:
+            text: "✨ CLEAR"
+            font_size: sp(12)
+            bold: True
+            background_normal: ""
+            background_color: (0.12, 0.15, 0.21, 1)
+            color: (0.65, 0.72, 0.82, 1)
+            on_release: app.clear_chat()

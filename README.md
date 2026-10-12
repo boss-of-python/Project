@@ -55,20 +55,30 @@ Debian/Ubuntu: `sudo apt install python3-tk` first (tkinter).
 | List | `list` · `show files` · `show reports in work` · `what's in downloads` · `how many files in docs` |
 | Create folder | `create folder work/reports` · `make a folder called ideas in notes` |
 | Create file | `create file todo.txt` · `create file memo.txt with meeting at 3 in notes` |
+| Read / Preview | `read todo.txt` · `preview notes.md` · `what does memo.txt say` |
 | Rename | `rename old.txt to new.txt` |
 | Move | `move report.pdf to work` · `move a.txt into docs` |
 | Copy | `copy report.pdf to backups` |
 | Delete | `delete old.txt` (→ trash; say `undo` to restore) · `delete old.txt permanently` |
+| Trash | `show trash` · `what's in trash` · `empty trash` |
 | Search | `find invoice` · `search for pdf files` · `find *.log` |
 | Open | `open notes` (opens in default app / file manager) · `show in folder report.pdf` |
 | Organize | `organize downloads` (by extension) · `organize downloads by date` |
-| Navigate | `go to work` · `cd work/reports` · `cd` (back to root) |
-| Safety net | `undo` (last action) · `help` |
+| Navigate | `go to work` · `go back` / `up` · `cd work/reports` · `cd` (back to root) · `status` |
+| Safety net | `undo` (multi-step undo stack, including `organize`) · `help` |
 
 Deletes go to `.thans_trash` inside your working root by default — nothing is
 destroyed unless you explicitly say *permanently* (or enable it in Settings).
 All operations are confined to the working root; THANS refuses to touch paths
 outside it.
+
+## UI & UX highlights (Desktop & Android APK)
+
+- **60 FPS Acoustic Wave & Activity Orb:** real-time animated wave header that breathes when idle, pulses with multi-bar acoustic waves while listening (`🎤`), sweeps during execution, and flashes emerald/amber on completion.
+- **Interactive Breadcrumb Bar & Live Workspace Explorer:** click/tap any breadcrumb segment to jump to a parent folder, or browse live folders and files with file-type icons and sizes (`Ctrl+B` on Desktop, `FILES` strip on Android). Double-click / tap a folder to enter it, double-click / tap a file to preview its contents, or right-click for a context menu.
+- **Live Intent Preview & `Tab` Autocomplete:** see how THANS interprets your command in real time before pressing Enter, with syntax hints and one-key (`Tab` / `⇥ Complete`) completion for both commands and real filenames in the current folder.
+- **Contextual Quick-Action Pills & `Ctrl+K` Command Palette:** run common actions (`List`, `+Folder`, `+File`, `Organize`, `Preview`, `Find`, `Undo`, `Trash`) with a single click/tap, or press `Ctrl+K` to search the full command catalog.
+- **Minimalist Multi-Theme Design:** switch between **Obsidian**, **Midnight**, and **Daylight** themes on the fly (`◑ Theme`).
 
 ## Models folder
 

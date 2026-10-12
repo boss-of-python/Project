@@ -19,6 +19,7 @@ from typing import Callable, Optional
 ALLOWED_ACTIONS = {
     "list", "mkdir", "touch", "rename", "move", "copy", "delete",
     "search", "open", "organize", "cd", "help", "undo",
+    "read", "trash", "status",
 }
 
 # --------------------------------------------------------------------------
@@ -129,9 +130,29 @@ RULES: list[tuple[str, re.Pattern, Callable[[re.Match], Optional[dict]]]] = [
      re.compile(r"^undo\b.*$"),
      lambda m: {"action": "undo", "params": {}}),
 
+    ("status",
+     re.compile(r"^(?:where am i|pwd|current (?:folder|directory|dir|path)|status|stats|workspace(?: info| status)?)$"),
+     lambda m: {"action": "status", "params": {}}),
+
+    ("trash-empty",
+     re.compile(r"^(?:empty|clear|clean|purge) (?:the )?trash$"),
+     lambda m: {"action": "trash", "params": {"mode": "empty"}}),
+
+    ("trash-list",
+     re.compile(r"^(?:show|list|view|open|what(?:'s| is) in) (?:the )?trash$|^trash$"),
+     lambda m: {"action": "trash", "params": {"mode": "list"}}),
+
     ("reveal",
      re.compile(r"^(?:show (?:it |that )?in (?:the )?(?:file )?folder(?: manager)?|show me in folder|reveal) (?P<p>.+)$"),
      lambda m: {"action": "open", "params": {"path": _name(m["p"]), "reveal": True}}),
+
+    ("read",
+     re.compile(r"^(?:read|preview|cat|view|show (?:the )?(?:contents?|text) of|what(?:'s| is) inside|what does (?P<p2>.+?) say)(?: (?P<p>.+))?$"),
+     lambda m: {"action": "read", "params": {"path": _name(m["p"] or m["p2"])}} if _name(m["p"] or m["p2"]) else None),
+
+    ("cd-up",
+     re.compile(r"^(?:go (?:back|up)|up|back|parent(?: folder| directory)?|cd \.\.)$"),
+     lambda m: {"action": "cd", "params": {"path": ".."}}),
 
     ("cd-home",
      re.compile(r"^(?:cd|home|go home|back to (?:root|home|start|top))$"),
