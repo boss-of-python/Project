@@ -1,0 +1,92 @@
+#:kivy 2.0
+
+Screen:
+    name: "thans"
+
+    BoxLayout:
+        orientation: "vertical"
+        padding: dp(8)
+        spacing: dp(6)
+        bgcolor: (0.08, 0.09, 0.11, 1)
+
+        # header
+        BoxLayout:
+            size_hint_y: 0.07
+            Label:
+                text: "THANS · offline file assistant"
+                font_size: sp(14)
+                bold: True
+                color: (1, 1, 1, 1)
+                halign: "left"
+                size_hint_x: 0.65
+            Button:
+                id: btn_speak
+                text: "SPEAK: OFF"
+                font_size: sp(11)
+                background_color: (0.2, 0.22, 0.27, 1)
+                on_release: app.toggle_speak()
+
+        # status
+        Label:
+            id: status
+            size_hint_y: 0.06
+            halign: "center"
+            valign: "middle"
+            font_size: sp(12)
+            color: (0.55, 0.6, 0.68, 1)
+            text: "starting…"
+
+        # chat (newest on top)
+        ScrollView:
+            id: chat_scroll
+            size_hint_y: 1
+            do_scroll_x: False
+            bar_width: 0
+            BoxLayout:
+                id: chat_box
+                orientation: "vertical"
+                size_hint_y: None
+                height: self.minimum_height
+                padding: dp(4)
+                spacing: dp(4)
+
+        # input row
+        BoxLayout:
+            size_hint_y: 0.11
+            spacing: dp(6)
+            TextInput:
+                id: input
+                multiline: False
+                font_size: sp(15)
+                text_color: (1, 1, 1, 1)
+                foreground_color: (0.25, 0.85, 0.35, 1)
+                background_color: (0.13, 0.14, 0.17, 1)
+                hint_text: "type a command, e.g. 'create folder work'"
+                hint_foreground_color: (0.4, 0.44, 0.5, 1)
+                on_text_validate: app.send_input()
+            Button:
+                text: "SEND"
+                font_size: sp(13)
+                background_color: (0.31, 0.55, 1, 1)
+                on_release: app.send_input()
+
+        # action row
+        BoxLayout:
+            size_hint_y: 0.10
+            spacing: dp(6)
+            Button:
+                id: btn_mic
+                text: "MIC"
+                font_size: sp(12)
+                background_color: (0.2, 0.22, 0.27, 1)
+                on_release: app.toggle_mic()
+            Button:
+                text: "HELP"
+                font_size: sp(12)
+                background_color: (0.2, 0.22, 0.27, 1)
+                on_release: app.say_help()
+            Button:
+                text: "CLEAR"
+                font_size: sp(12)
+                background_color: (0.2, 0.22, 0.27, 1)
+                on_release: app.clear_chat()

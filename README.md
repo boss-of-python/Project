@@ -106,6 +106,17 @@ installer/linux/install.sh       # installs to /opt/thans + launcher (thans.desk
 `python -m venv .venv && . .venv/bin/activate && pip install -r requirements.txt`
 then `python -m thans`. (A DMG can be produced the same way with PyInstaller.)
 
+### Android (APK)
+A Kivy port of the **same app** lives in [`android/`](android/README.md).
+Fastest path to the APK:
+
+1. GitHub repo → **Actions** tab → **Build Android APK** → **Run workflow**.
+2. Download the **`thans-android`** artifact when the job finishes → install the `.apk`.
+
+Text commands work fully offline on the phone; voice input/replies use the
+device's own speech service (best-effort — see `android/README.md` for the
+capability matrix and local buildozer instructions).
+
 ## Project layout
 
 ```

@@ -4,13 +4,15 @@
 > a new one should: (1) read this file, (2) find the first `⬜` step, (3) continue
 > from there, (4) tick steps off as they complete, (5) `git commit` after every phase.
 
-**Project:** THANS — a fully offline Python/tkinter assistant that accesses, alters,
+**Project:** THANS — a fully offline Python assistant that accesses, alters,
 creates and organizes files & folders via **voice commands** and **text commands**,
 with an optional small offline LLM for free-form phrasing.
+Desktop build = tkinter UI (steps 1–50). Android build = Kivy UI reusing the same
+pure-Python core (steps 51–60).
 
-**Last update:** 2026-10-12 — ALL 50 STEPS COMPLETE ✅  (45/45 tests green, end-to-end demo verified)
-**Current position:** STEP 50 / 50 — build complete
-**Resume rule:** do the first unchecked step; do not skip ahead; commit after each phase.
+**Last update:** 2026-10-12 — Android port (Phase 8) complete; desktop merged to main as PR #1
+**Current position:** STEP 60 / 60 — desktop on main, Android project in PR #2
+**Resume rule:** do the first unchecked step; do not skip ahead; commit + push after each phase.
 
 Legend: ⬜ not started · 🚧 in progress · ✅ done
 
@@ -90,6 +92,19 @@ Legend: ⬜ not started · 🚧 in progress · ✅ done
 - [x] 49. `installer/windows/` — `build_exe.bat` + Inno Setup `setup.iss` (desktop shortcut, optional models bundle, uninstaller)
 - [x] 50. `installer/linux/` — `build_exe.sh` + `install.sh` + `thans.desktop`; full test-suite run (`--selftest`) green; final README polish
 
+## Phase 8 — Android (Kivy) port (steps 51–60)
+
+- [x] 51. Merge desktop build to `main` (PR #1) — repo now shows the full app
+- [x] 52. `android/` buildozer project: `main.py`, `buildozer.spec` (python3.11 + kivy + pyjnius, RECORD_AUDIO), `stage_thans.sh` (single source of truth: copies `../thans` in)
+- [x] 53. `android/thans.kv` — dark UI: status bar, scrolling chat (newest on top), input+SEND, MIC/HELP/CLEAR, SPEAK toggle
+- [x] 54. `thans_android/app.py` — Kivy front-end reusing the SAME `thans` engine (Kivy-thread-safe via Clock, working root = P4A cwd)
+- [x] 55. Headless UI validation: KV parsed by real Kivy parser, all ids + handlers verified, full simulated session through real code paths (caught & fixed missing `chat_scroll` id)
+- [x] 56. `thans_android/audio.py` — TTS via `android.speech.tts.TextToSpeech` (pyjnius, fully guarded)
+- [x] 57. STT via `android.speech.SpeechRecognizer` + RecognitionListener (pyjnius, guarded; offline only if device has an offline voice pack)
+- [x] 58. `.github/workflows/build-apk.yml` — CI: core tests → buildozer `android debug` → **APK artifact** (`thans-android`)
+- [x] 59. `android/README.md` — how to get the APK (Actions or local buildozer), capability matrix, limits
+- [x] 60. Core suite still green (45/45), committed + pushed, PR #2 opened for `main`
+
 ---
 
 ## Changelog
@@ -105,6 +120,8 @@ Legend: ⬜ not started · 🚧 in progress · ✅ done
 | 2026-10-12 | 41–44 | Phase 5: Vosk STT + pyttsx3 TTS + voice loop wiring. |
 | 2026-10-12 | 45–47 | Phase 6: optional llama.cpp LLM parser + whitelist validation + fallback chain. |
 | 2026-10-12 | 48–50 | Phase 7: PyInstaller build script, Windows (Inno Setup) + Linux installers. Full suite green. |
+| 2026-10-12 | 51 | Desktop build merged to `main` (PR #1) — now visible in the repo. |
+| 2026-10-12 | 52–60 | Phase 8: Android (Kivy) port reusing the core; headless-validated; CI builds the APK artifact. PR #2 opened. |
 
 ## Known decisions (so future sessions don't re-litigate)
 
@@ -114,3 +131,4 @@ Legend: ⬜ not started · 🚧 in progress · ✅ done
 - **LLM (optional):** `llama-cpp-python` + GGUF in `models/`. Default **Qwen2.5-0.5B-Instruct Q4_K_M (≈ 408 MB)** — best tiny model for strict-JSON command extraction. App works 100 % without it (rule parser covers all documented commands).
 - **Safety:** all ops confined to one working root; deletes go to trash by default; single-level undo; config in `~/.thans/config.json`.
 - **Python ≥ 3.10.** Tests run via `python -m unittest` (no pytest dependency).
+- **Android:** Kivy UI reuses the same pure-Python `thans` core (staged in at build time). Vosk/sounddevice/pyttsx3/llama are desktop-only (no Android builds); the phone uses Android's own `SpeechRecognizer`/`TextToSpeech` via pyjnius, so voice is best-effort (offline only with an on-device offline voice pack) and the LLM is off. Text commands are the guaranteed-fully-offline path on Android. Working root = the app's private storage dir (P4A cwd) — the only storage Android allows without broad permissions. APK is produced by the GitHub Actions workflow (`thans-android` artifact) or a local `buildozer android debug`.

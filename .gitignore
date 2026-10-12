@@ -15,7 +15,12 @@ models/*
 build/
 dist/
 *.spec
+!android/buildozer.spec
 installer/windows/Output/
+
+# Android: staged core copy + buildozer output (rebuilt by stage_thans.sh)
+android/thans/
+android/bin/
 
 # Editor / OS
 .vscode/
