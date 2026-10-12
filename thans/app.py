@@ -56,7 +56,7 @@ class ThansApp:
         self._build()
         self._refresh_chips()
         self._welcome()
-        self.protocol("WM_DELETE_WINDOW", self._on_close)
+        self.root.protocol("WM_DELETE_WINDOW", self._on_close)
         self.root.after(100, self._poll)
 
     # ------------------------------------------------------------------ ui

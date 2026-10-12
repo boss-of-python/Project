@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import os
 import re
+from typing import Callable, Optional
 
 ANDROID = "ANDROID_DATA" in os.environ or "ANDROID_ROOT" in os.environ
 
@@ -20,6 +21,19 @@ _ctx = None
 _tts = None
 _sr = None
 _listener = None
+
+# Friendly descriptions for android.speech.SpeechRecognizer error constants
+SPEECH_ERRORS: dict[int, str] = {
+    1: "network timeout",
+    2: "network unavailable (check offline voice pack)",
+    3: "audio recording error",
+    4: "speech server error",
+    5: "client side error",
+    6: "no speech heard — try again",
+    7: "didn't catch that — try speaking clearly",
+    8: "recognizer busy",
+    9: "microphone permission needed",
+}
 
 
 def _context():
@@ -29,6 +43,21 @@ def _context():
         PythonActivity = autoclass("org.kivy.android.PythonActivity")
         _ctx = PythonActivity.mActivity
     return _ctx
+
+
+def ensure_mic_permission() -> bool:
+    """Ensure RECORD_AUDIO runtime permission is granted on Android 6.0+."""
+    if not ANDROID:
+        return False
+    try:
+        from android.permissions import Permission, check_permission, request_permissions
+        if not check_permission(Permission.RECORD_AUDIO):
+            request_permissions([Permission.RECORD_AUDIO])
+            return False
+        return True
+    except Exception:
+        # If android.permissions helper is unavailable, allow SpeechRecognizer to try
+        return True
 
 
 # ---------------------------------------------------------------- TTS
@@ -63,11 +92,15 @@ def speak(text: str) -> None:
 
 
 # ---------------------------------------------------------------- STT
-def _make_listener(on_result):
+def _make_listener(
+    on_result: Callable[[Optional[str], Optional[str]], None],
+    on_partial: Optional[Callable[[str], None]] = None,
+    on_rms: Optional[Callable[[float], None]] = None,
+):
     """Python implementation of android.speech.RecognitionListener (jnius)."""
     from jnius import JavaClass, autoclass
 
-    RecognitionListener = autoclass("android.speech.RecognitionListener")
+    autoclass("android.speech.RecognitionListener")
 
     class L(JavaClass):  # noqa: N801 - jnius requires Java-style names
         __javainterfaces__ = ["android.speech.RecognitionListener"]
@@ -82,35 +115,57 @@ def _make_listener(on_result):
             pass
 
         def onError(self, error):
-            on_result(None, f"error {error}")
+            code = int(error) if isinstance(error, (int, float)) else -1
+            msg = SPEECH_ERRORS.get(code, f"error {error}")
+            on_result(None, msg)
 
         def onEvent(self, event_type, params):
             pass
 
         def onPartialResults(self, bundle):
-            pass
+            if on_partial is None:
+                return
+            try:
+                matches = bundle.getCharSequenceArrayList("android.speech.extra.RESULTS")
+                if matches is not None and matches.size() > 0:
+                    partial = str(matches.get(0) or "").strip()
+                    if partial:
+                        on_partial(partial)
+            except Exception:
+                pass
 
         def onResults(self, bundle):
             text = None
             try:
                 matches = bundle.getCharSequenceArrayList("android.speech.extra.RESULTS")
-                if matches is not None:
-                    text = matches.get(0)
+                if matches is not None and matches.size() > 0:
+                    text = str(matches.get(0) or "").strip()
             except Exception:
                 text = None
             on_result(text, None)
 
         def onRmsChanged(self, rms):
-            pass
+            if on_rms is not None:
+                try:
+                    on_rms(float(rms))
+                except Exception:
+                    pass
 
     return L()
 
 
-def start_listening(on_result) -> bool:
+def start_listening(
+    on_result: Callable[[Optional[str], Optional[str]], None],
+    on_partial: Optional[Callable[[str], None]] = None,
+    on_rms: Optional[Callable[[float], None]] = None,
+) -> bool:
     """Request speech recognition. on_result(text, error) — Android thread."""
     global _sr, _listener
     if not ANDROID:
         on_result(None, "not Android")
+        return False
+    if not ensure_mic_permission():
+        on_result(None, "microphone permission requested — tap MIC again once allowed")
         return False
     try:
         from jnius import autoclass
@@ -121,11 +176,12 @@ def start_listening(on_result) -> bool:
             return False
         stop_listening()
         _sr = SpeechRecognizer.createSpeechRecognizer(_context())
-        _listener = _make_listener(on_result)  # keep a reference (no GC)
+        _listener = _make_listener(on_result, on_partial=on_partial, on_rms=on_rms)
         _sr.setRecognitionListener(_listener)
         intent = Intent("android.intent.action.RECOGNIZE_SPEECH")
         intent.putExtra("android.speech.extra.LANGUAGE_MODEL",
                         "android.speech.extra.LANGUAGE_MODEL_FREE_FORM")
+        intent.putExtra("android.speech.extra.PARTIAL_RESULTS", True)
         _sr.startListening(intent)
         return True
     except Exception as e:  # noqa: BLE001

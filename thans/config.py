@@ -30,6 +30,9 @@ DEFAULTS: dict[str, Any] = {
     "use_llm": False,                # optional offline LLM parser
     "llm_model": DEFAULT_LLM_MODEL,  # GGUF filename inside models/
     "permanent_delete": False,       # if True, 'delete' skips the trash
+    "theme": "dark",                 # "dark" | "light"
+    "animations": True,              # 60fps sonic wave & smooth UI transitions
+    "sidebar": True,                 # live file workspace inspector open
 }
 
 

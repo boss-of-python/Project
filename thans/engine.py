@@ -135,6 +135,8 @@ class Engine:
     def _cd(self, name: str) -> tuple:
         if name in ("~", "", "home", "root"):
             d = self.root
+        elif name == "..":
+            d = self.root if self.current == self.root else actions.safe_path(self.root, self.current, "..")
         else:
             d = actions.safe_path(self.root, self.current, name)
             if not d.is_dir():
@@ -189,6 +191,22 @@ class Engine:
                     t = actions.to_trash(self.root, f)
                     return True, f"Undid create: moved '{actions.rel(f, self.root)}' to trash.", None
                 return False, "That file is already gone — nothing to undo.", None
+            if a == "organize":
+                moves = rec.get("moves") or []
+                restored = 0
+                for dest_s, orig_s in reversed(moves):
+                    dp, op = Path(dest_s), Path(orig_s)
+                    if dp.exists() and not op.exists():
+                        op.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.move(str(dp), str(op))
+                        restored += 1
+                for dir_s in reversed(rec.get("dirs") or []):
+                    d = Path(dir_s)
+                    if d.is_dir() and not any(d.iterdir()):
+                        d.rmdir()
+                if restored:
+                    return True, f"Undid organize: restored {restored} file{'s' if restored != 1 else ''}.", None
+                return False, "Nothing left to undo for that organize.", None
             return False, f"I can't undo '{a}' automatically.", None
         except actions.UnsafePathError as e:
             return False, f"Blocked for safety: {e}", None
