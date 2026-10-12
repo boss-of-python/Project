@@ -15,11 +15,15 @@ Desktop + Android UI, live workspace inspector, intent preview, sonic visualizer
 headless CLI, cross-OS CI) and **Phase 13** added on top: merge reconciliation,
 installer/CI hardening, deterministic UI preview.
 
-**Current position:** STEP 13.6 of Phase 13 — see “Phase 13” below for the only
+**Current position:** STEP 13.8 of Phase 13 — see “Phase 13” below for the only
 open checkboxes. Phases 1–12 are complete.
 
-**Resume rule:** do the first unchecked step; do not skip ahead; commit + push
-after each phase.
+**Resume rule:** the next unchecked step is **13.9** (release notes + tag); after
+that the roadmap below (86–100) is the plan. Commit + push after each phase.
+
+**Test suite:** `python -m thans --selftest` → **100 tests, all green**, no
+display, models, tkinter or kivy required (the Kivy test skips itself when kivy
+is absent and uses the real Kivy parser when it is installed).
 Legend: ⬜ not started · 🚧 in progress · ✅ done
 
 ---
@@ -182,7 +186,11 @@ side had covered.
   `compute_sonic_waves`, `ui_helpers.QUICK_CHIPS`/`preview_intent` — desktop in
   dark plus both phone tabs (chat dark, files **light**), so both themes ship
   visual proof. CI re-renders it as an artifact on every run.
-- [ ] 13.8 Watch the CI run for this branch and fix whatever it reports
+- [x] 13.8 CI is green on all 7 jobs (Linux/Windows/macOS × py3.11/3.12 + preview).
+  It caught two real bugs on the way: the CLI crashed on a cp1252 Windows
+  console, and a redirected stream made subprocess output undecodable. Fixed in
+  `thans/__init__.py:use_utf8_output()` (only switches streams that cannot
+  encode our glyphs) and covered by 4 new tests + a cp1252 whole-suite run.
 - [ ] 13.9 Ship v0.2.0 release notes + tag once `main` is green
 
 ## Roadmap (steps 86–100, not started)
