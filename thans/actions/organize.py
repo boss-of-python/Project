@@ -15,6 +15,8 @@ def organize(root: Path, current: Path, path: str | None = None, mode: str = "ex
         raise NotFoundError(f"'{path}' is not a folder.")
 
     moved: dict[str, int] = {}
+    moves: list[tuple[str, str]] = []
+    created_dirs: list[str] = []
     for f in sorted(d.iterdir(), key=lambda p: p.name.casefold()):
         if not f.is_file() or f.name.startswith("."):
             continue
@@ -24,9 +26,12 @@ def organize(root: Path, current: Path, path: str | None = None, mode: str = "ex
             key = f.suffix.lstrip(".").lower() or "other"
         key = re.sub(r"[^a-z0-9._-]", "_", key) or "other"
         target = d / key
-        target.mkdir(exist_ok=True)
+        if not target.exists():
+            target.mkdir(exist_ok=True)
+            created_dirs.append(str(target))
         dest = unique_dest(target, f.name)
         shutil.move(str(f), str(dest))
+        moves.append((str(dest), str(f)))
         moved[key] = moved.get(key, 0) + 1
 
     if not moved:
@@ -34,4 +39,9 @@ def organize(root: Path, current: Path, path: str | None = None, mode: str = "ex
 
     total = sum(moved.values())
     summary = ", ".join(f"{k}/ ({n})" for k, n in sorted(moved.items()))
-    return (True, f"Moved {total} file{'s' if total != 1 else ''} in '{rel(d, root)}' → {summary}.", None)
+    record = {"action": "organize", "moves": moves, "dirs": created_dirs}
+    return (
+        True,
+        f"Moved {total} file{'s' if total != 1 else ''} in '{rel(d, root)}' → {summary}.",
+        record,
+    )

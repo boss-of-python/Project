@@ -1,1042 +1,1352 @@
-"""THANS desktop window — minimal, animated, one accent colour.
+"""THANS main window — minimalistic, animated desktop UI (Windows / Linux / macOS).
 
-Layout
-------
-    ┌ header ─────────────────────────────────────────────────────────┐
-    │ ✦ THANS  v0.2.0     [folder] [voice] [llm]         ↺  ↓  ⚙      │
-    ├───────────── chat transcript ──────────┬── dashboard ──────────┤
-    │  THANS ▎ rules        (types itself…)  │  working folder card  │
-    │                              You ▎     │  quick actions        │
-    │                          list work     │  voice card           │
-    ├────────────────────────────────────────┴───────────────────────┤
-    │  ● suggestions                                       ┌───────┐ │
-    │  [ ▍ tell me what to do…            ] [🎤] [ Send ➤ ] │status │ │
-    └───────────────────────────────────────────────────────────────┘
-
-Everything visible is drawn from ``ui/theme.py`` tokens and animated by a single
-60 fps loop (``_tick``) that also drains the worker queue — one loop, one
-source of truth, no widget ever blocks.
+Architecture & UX highlights:
+  * Curated Dark & Light themes with smooth cross-fade color transitions
+  * 60fps Sonic Visualizer canvas (multi-ribbon sine waves + breathing orb)
+  * Interactive Breadcrumb bar (`🏠 root › folder › sub`) + `⬆ Up` + `♻️ Trash` badge
+  * Split-pane Live File Workspace Inspector with instant filter, smart icons,
+    double-click navigation, context actions, and emerald diff highlight pulses
+  * Real-time Live Intent Preview pill as you type + `Tab` autocomplete
+  * One-click Quick-Action Chips (`List`, `Folder`, `File`, `Organize`, `Find`, `Undo`, `Help`)
+  * Progressive streaming text reveal & slide-in toast notifications
 """
 from __future__ import annotations
 
+from datetime import datetime
 import queue
 import shutil
 import subprocess
 import sys
 import threading
-import time
 import traceback
 from pathlib import Path
-from tkinter import font as tkfont
-from tkinter import filedialog, messagebox, ttk
-import tkinter as tk
+from typing import Optional
 
-from . import APP_NAME, APP_TAGLINE, __version__, config, model_manager
-from .engine import COMMAND_REFERENCE, Engine
+import tkinter as tk
+from tkinter import filedialog, messagebox, ttk
+
+from . import APP_NAME, APP_TAGLINE, __version__, animations, config, model_manager, ui_helpers
+from .engine import Engine
 from .stt import VoiceSTT
 from .tts import Speaker
-from .ui import logic
-from .ui import theme as T
-from .ui.chat import ChatLog, EmptyState
-from .ui.panels import (BootOverlay, FolderCard, HelpPanel, QuickCard,
-                        SettingsPanel, VoiceCard)
-from .ui.widgets import (Card, Chip, IconButton, ProgressBar, RoundedButton, Toaster,
-                         Tooltip, widget_bg)
 
-#: Set THANS_NO_BOOT=1 to skip the start screen (tests, screenshots, slow machines).
-NO_BOOT = bool(__import__("os").environ.get("THANS_NO_BOOT"))
+# Platform-tuned typography
+UI_FONT_FAMILY = "Segoe UI" if sys.platform == "win32" else "DejaVu Sans"
+MONO_FAMILY = "Consolas" if sys.platform == "win32" else "DejaVu Sans Mono"
+
+FONT_TITLE = (UI_FONT_FAMILY, 14, "bold")
+FONT_SUB = (UI_FONT_FAMILY, 9)
+FONT_UI = (UI_FONT_FAMILY, 9)
+FONT_UI_BOLD = (UI_FONT_FAMILY, 9, "bold")
+FONT_CHIP = (UI_FONT_FAMILY, 8, "bold")
+FONT_MONO = (MONO_FAMILY, 10)
+FONT_MONO_S = (MONO_FAMILY, 9)
+FONT_MONO_B = (MONO_FAMILY, 9, "bold")
 
 
 class ThansApp:
-    """The desktop app. Public surface: :meth:`run`, :meth:`submit`."""
+    """Minimalistic, animated desktop assistant window."""
 
     def __init__(self, cfg: dict | None = None, text_only: bool = False):
-        self.cfg = dict(cfg or config.load_config())
-        self.text_only = text_only
-        self.anim = logic.Animator(fps=60) if T.motion_enabled(self.cfg) else None
+        self.cfg = dict(config.DEFAULTS)
+        if cfg:
+            self.cfg.update(cfg)
+        else:
+            self.cfg.update(config.load_config())
 
-        # ---- model & engine layer (created before the window so the boot
-        #      screen can report real progress)
-        self.engine: Engine | None = None
-        self.speaker: Speaker | None = None
-        self.stt: VoiceSTT | None = None
-        self.model_status: dict = {}
+        self.theme_name: str = str(self.cfg.get("theme", "dark"))
+        if self.theme_name not in animations.THEMES:
+            self.theme_name = "dark"
+        self.pal: dict[str, str] = animations.get_theme(self.theme_name)
+
+        self.animations_on: bool = bool(self.cfg.get("animations", True))
+        self.sidebar_open: bool = bool(self.cfg.get("sidebar", True))
+
+        self.engine = Engine(self.cfg["root"], self.cfg)
+        self.stt = VoiceSTT()
+        self.speaker = Speaker(self.cfg.get("tts", True), int(self.cfg.get("tts_rate", 185)))
+
         self.mic_on = False
         self.busy = False
         self._downloading = False
+        self._closing = False
 
-        # ---- state
+        # Sonic visualizer & animation state
+        self.sonic_state = "idle"      # idle | listening | thinking | speaking | success | error
+        self.sonic_phase = 0.0
+        self.sonic_level = 0.0
+        self._flash_ticks = 0
+        self._toast_ticks = 0
+
+        # Workspace snapshot & diff highlight animation state
+        self.snapshot: Optional[ui_helpers.DirSnapshot] = None
+        self._highlight_step = 0
+        self._highlight_names: set[str] = set()
+        self._selected_entry: Optional[ui_helpers.DirEntry] = None
+
+        # Command history
         self.history: list[str] = []
         self._hist_i: int | None = None
-        self._draft = ""            # what was typed before browsing history
         self._q: "queue.Queue" = queue.Queue()
-        self._last_dt = time.time()
-        self._suggest_job = None
-        self._boot_done = False
-        self.toaster = None
-        self.thinking = None
-        self._hero_alive = True
+        self.text_only = text_only
 
+        # Root window
         self.root = tk.Tk()
-        self.root.withdraw()                       # shown once the chrome is built
         self.root.title(f"{APP_NAME} — {APP_TAGLINE}")
-        self.root.configure(bg=T.BG)
-        self.root.minsize(680, 520)
-        self._restore_geometry()
-        self.fonts = self._load_fonts()
-        self._style_ttk()
+        self.root.geometry("1060x660")
+        self.root.minsize(760, 480)
+        self.root.configure(bg=self.pal["bg"])
+
+        self._style()
         self._build()
-        self._bind_keys()
-
-        if NO_BOOT:
-            self._finish_boot()
-        else:
-            self.root.deiconify()
-            self._run_boot()
-
-    # =====================================================================
-    # boot
-    # =====================================================================
-    def _run_boot(self) -> None:
-        steps = [
-            ("starting engine", self._boot_engine),
-            ("checking offline models", self._boot_models),
-            ("scanning working folder", self._boot_scan),
-            ("ready", lambda: None),
-        ]
-        self.boot = BootOverlay(self.root, self.anim, self.fonts, steps,
-                                on_done=self._finish_boot)
-        self.boot.start()
-        self.root.deiconify()
-
-    def _boot_engine(self) -> None:
-        self.engine = Engine(self.cfg["root"], self.cfg)
-        self.speaker = Speaker(self.cfg.get("tts", True), int(self.cfg.get("tts_rate", 185)))
-        self.stt = VoiceSTT()
-
-    def _boot_models(self) -> None:
-        self.model_status = model_manager.status(self.cfg)
-
-    def _boot_scan(self) -> None:
-        self.folder_card.set_root(self.engine.root)
-
-    def _finish_boot(self) -> None:
-        if self._boot_done:
-            return
-        self._boot_done = True
-        self.root.deiconify()
-        self.deiconify_if_needed()
+        self._bind_shortcuts()
         self._refresh_chips()
+        self._refresh_workspace(animate_diff=False)
+        self._update_intent_preview()
         self._welcome()
-        self.hero.reveal()
-        self.input.focus_set()
-        self._tick()
 
-    def deiconify_if_needed(self) -> None:
-        try:
-            self.root.deiconify()
-        except tk.TclError:
-            pass
+        self.root.protocol("WM_DELETE_WINDOW", self._on_close)
+        self.root.after(60, self._poll)
+        self.root.after(40, self._animate_tick)
 
-    # =====================================================================
-    # chrome
-    # =====================================================================
-    def _restore_geometry(self) -> None:
-        geo = str(self.cfg.get("window") or "")
-        if geo and "x" in geo:
-            try:
-                self.root.geometry(geo)
-                return
-            except tk.TclError:
-                pass
-        w, h = 1060, 700
-        sw, sh = self.root.winfo_screenwidth(), self.root.winfo_screenheight()
-        x, y = max(0, (sw - w) // 2), max(0, (sh - h) // 3)
-        self.root.geometry(f"{w}x{h}+{x}+{y}")
-
-    def _load_fonts(self) -> dict:
-        try:
-            families = set(tkfont.families(self.root))
-        except tk.TclError:
-            families = set()
-        ui = T.resolve_family(families, T.UI_FAMILIES)
-        mono = T.resolve_family(families, T.MONO_FAMILIES)
-        return {
-            "ui": ui, "mono": mono,
-            "title": (ui, T.SIZE_TITLE, "bold"),
-            "h2": (ui, T.SIZE_BODY, "bold"),
-            "body": (ui, T.SIZE_BODY),
-            "mono_small": (mono, T.SIZE_SMALL),
-            "small": (ui, T.SIZE_SMALL),
-            "small_bold": (ui, T.SIZE_SMALL, "bold"),
-            "tiny": (ui, T.SIZE_TINY),
-        }
-
-    def _style_ttk(self) -> None:
+    # ------------------------------------------------------------------ styling
+    def _style(self) -> None:
+        p = self.pal
         st = ttk.Style(self.root)
         try:
             st.theme_use("clam")
         except tk.TclError:
             pass
-        st.configure(".", background=T.BG, foreground=T.FG)
-        st.configure("TCombobox", fieldbackground=T.SURFACE_HI, background=T.SURFACE_HI,
-                     foreground=T.FG, arrowcolor=T.FG_DIM, borderwidth=0)
-        st.configure("Vertical.TScrollbar", background=T.SURFACE_HI, troughcolor=T.BG,
-                     borderwidth=0, arrowcolor=T.FG_DIM)
+        st.configure(".", background=p["panel"], foreground=p["fg"], font=FONT_UI)
+        st.configure(
+            "TButton",
+            background=p["panel2"],
+            foreground=p["fg"],
+            padding=(10, 6),
+            borderwidth=0,
+            focusthickness=0,
+            font=FONT_UI,
+        )
+        st.map("TButton", background=[("active", p["panel_hover"])])
+        st.configure(
+            "Accent.TButton",
+            background=p["accent"],
+            foreground="#ffffff",
+            padding=(14, 7),
+            borderwidth=0,
+            font=FONT_UI_BOLD,
+        )
+        st.map("Accent.TButton", background=[("active", p["accent_hover"])])
+        st.configure(
+            "TEntry",
+            fieldbackground=p["panel2"],
+            foreground=p["fg"],
+            insertcolor=p["fg"],
+            borderwidth=0,
+            padding=6,
+        )
 
+    # ------------------------------------------------------------------ layout
     def _build(self) -> None:
-        self.root.grid_rowconfigure(2, weight=1)
-        self.root.grid_columnconfigure(0, weight=1)
-        self._build_header()
+        p = self.pal
 
-        # ---- body: transcript + dashboard
-        body = tk.Frame(self.root, bg=T.BG)
-        body.grid(row=2, column=0, sticky="nsew", padx=T.PAD, pady=(0, T.PAD_S))
-        body.grid_columnconfigure(0, weight=1)
-        body.grid_rowconfigure(0, weight=1)
-        self.body = body
+        # ===================== 1. HEADER BAR =====================
+        self.head = tk.Frame(self.root, bg=p["bg"])
+        self.head.pack(fill="x", padx=16, pady=(12, 4))
 
-        chat_wrap = tk.Frame(body, bg=T.BG)
-        chat_wrap.grid(row=0, column=0, sticky="nsew")
-        self.chat_card = Card(chat_wrap, animator=self.anim, hug=False, fill=T.BG,
-                              border=T.BORDER, radius=T.RADIUS_LG, padding=0)
-        self.chat_card.pack(fill="both", expand=True)
-        self.chat = ChatLog(self.chat_card.body, self.anim, fonts=self.fonts,
-                            on_rerun=self.submit, on_clear=self.clear_chat)
+        brand = tk.Frame(self.head, bg=p["bg"])
+        brand.pack(side="left")
+        self.lbl_title = tk.Label(brand, text=APP_NAME, font=FONT_TITLE, bg=p["bg"], fg=p["fg"])
+        self.lbl_title.pack(side="left")
+        self.lbl_sub = tk.Label(
+            brand,
+            text=f"  offline assistant · v{__version__}",
+            font=FONT_SUB,
+            bg=p["bg"],
+            fg=p["dim"],
+        )
+        self.lbl_sub.pack(side="left", pady=(4, 0))
+
+        # Sonic Visualizer Canvas (multi-ribbon sine wave + breathing orb)
+        self.sonic_canvas = tk.Canvas(
+            self.head,
+            width=190,
+            height=30,
+            bg=p["panel"],
+            highlightthickness=1,
+            highlightbackground=p["border"],
+            bd=0,
+        )
+        self.sonic_canvas.pack(side="left", padx=(16, 8))
+        self._draw_sonic_canvas()
+
+        # Right-side status chips & quick controls
+        self.cframe = tk.Frame(self.head, bg=p["bg"])
+        self.cframe.pack(side="right")
+
+        self.chips: dict[str, tk.Label] = {}
+        for key, label in (
+            ("root", "📂 …"),
+            ("stt", "STT —"),
+            ("tts", "TTS —"),
+            ("llm", "LLM —"),
+            ("trash", "♻️ 0"),
+        ):
+            lbl = tk.Label(
+                self.cframe,
+                text=label,
+                font=FONT_CHIP,
+                bg=p["panel"],
+                fg=p["dim"],
+                padx=8,
+                pady=4,
+                cursor="hand2" if key in ("root", "trash") else "arrow",
+            )
+            lbl.pack(side="left", padx=2)
+            self.chips[key] = lbl
+
+        self.chips["root"].bind("<Button-1>", lambda e: self._pick_root())
+        self.chips["trash"].bind("<Button-1>", lambda e: self._submit("undo"))
+
+        self.btn_theme = tk.Button(
+            self.cframe,
+            text="☀️" if self.theme_name == "dark" else "🌙",
+            font=FONT_UI,
+            bg=p["panel2"],
+            fg=p["fg"],
+            bd=0,
+            padx=8,
+            pady=3,
+            cursor="hand2",
+            command=self.toggle_theme,
+        )
+        self.btn_theme.pack(side="left", padx=(6, 2))
+
+        self.btn_sidebar = tk.Button(
+            self.cframe,
+            text="◫ Files",
+            font=FONT_CHIP,
+            bg=p["accent_soft"] if self.sidebar_open else p["panel2"],
+            fg=p["accent"] if self.sidebar_open else p["fg"],
+            bd=0,
+            padx=8,
+            pady=4,
+            cursor="hand2",
+            command=self.toggle_sidebar,
+        )
+        self.btn_sidebar.pack(side="left", padx=2)
+
+        # ===================== 2. BREADCRUMB BAR =====================
+        self.nav_bar = tk.Frame(
+            self.root,
+            bg=p["panel"],
+            highlightthickness=1,
+            highlightbackground=p["border"],
+        )
+        self.nav_bar.pack(fill="x", padx=16, pady=(2, 6))
+
+        self.btn_up = tk.Button(
+            self.nav_bar,
+            text="⬆ Up",
+            font=FONT_CHIP,
+            bg=p["panel2"],
+            fg=p["fg"],
+            bd=0,
+            padx=8,
+            pady=3,
+            cursor="hand2",
+            command=lambda: self._submit("go back"),
+        )
+        self.btn_up.pack(side="left", padx=(6, 4), pady=4)
+
+        self.crumb_frame = tk.Frame(self.nav_bar, bg=p["panel"])
+        self.crumb_frame.pack(side="left", fill="x", expand=True, padx=4)
+
+        self.lbl_counts = tk.Label(
+            self.nav_bar,
+            text="",
+            font=FONT_SUB,
+            bg=p["panel"],
+            fg=p["dim"],
+            padx=8,
+        )
+        self.lbl_counts.pack(side="right", pady=4)
+
+        # ===================== 3. MAIN SPLIT BODY =====================
+        self.body = tk.Frame(self.root, bg=p["bg"])
+        self.body.pack(fill="both", expand=True, padx=16, pady=2)
+
+        # Left pane: Toast Banner + Chat Stream
+        self.chat_pane = tk.Frame(
+            self.body,
+            bg=p["panel"],
+            highlightthickness=1,
+            highlightbackground=p["border"],
+        )
+        self.chat_pane.pack(side="left", fill="both", expand=True)
+
+        self.toast_bar = tk.Label(
+            self.chat_pane,
+            text="",
+            font=FONT_UI_BOLD,
+            bg=p["accent_soft"],
+            fg=p["accent"],
+            anchor="w",
+            padx=12,
+            pady=5,
+        )
+        # toast_bar is packed dynamically when active
+
+        self.chat = tk.Text(
+            self.chat_pane,
+            bg=p["panel"],
+            fg=p["fg"],
+            insertbackground=p["fg"],
+            font=FONT_MONO,
+            relief="flat",
+            wrap="word",
+            state="disabled",
+            padx=14,
+            pady=12,
+            spacing1=3,
+            spacing3=3,
+            highlightthickness=0,
+        )
+        self._configure_chat_tags()
         self.chat.pack(fill="both", expand=True)
-        self.hero = EmptyState(self.chat_card.body, self.anim, self.fonts,
-                               on_starter=self._starter_clicked)
-        self.hero.place(relx=0, rely=0, relwidth=1, relheight=1)
 
-        # ---- dashboard column (hidden on narrow windows)
-        self.side = tk.Frame(body, bg=T.BG, width=264)
-        self.folder_card = FolderCard(self.side, self.anim, self.fonts,
-                                      on_open=self._open_root)
-        self.folder_card.pack(fill="x")
-        self.quick_card = QuickCard(self.side, self.anim, self.fonts, [
-            (T.SYM["wand"], "Organize", "Group this folder's files by type", "organize"),
-            (T.SYM["undo"], "Undo", "Reverse the last action (Ctrl+Z)", "undo"),
-            (T.SYM["search"], "Find", "Search by name or extension", "find"),
-            (T.SYM["list"], "Count", "How many files are here?", "count"),
-        ])
-        self.quick_card.pack(fill="x", pady=(T.PAD_S, 0))
-        self.voice_card = VoiceCard(self.side, self.anim, self.fonts,
-                                    on_speak_toggle=self._toggle_speak,
-                                    speak_on=bool(self.cfg.get("tts")))
-        self.voice_card.pack(fill="x", pady=(T.PAD_S, 0))
-        self.quick_card.buttons["organize"].command = lambda: self.submit("organize .")
-        self.quick_card.buttons["undo"].command = lambda: self.submit("undo")
-        self.quick_card.buttons["find"].command = self._focus_find
-        self.quick_card.buttons["count"].command = lambda: self.submit("how many files in .")
-        self._side_visible = True
-        self._apply_responsive()
+        # Right pane: Collapsible Live File Workspace Inspector
+        self.sidebar = tk.Frame(
+            self.body,
+            bg=p["panel"],
+            width=295,
+            highlightthickness=1,
+            highlightbackground=p["border"],
+        )
+        if self.sidebar_open:
+            self.sidebar.pack(side="right", fill="y", padx=(10, 0))
+            self.sidebar.pack_propagate(False)
 
-        self._build_composer()
-        self._build_status()
-        self.toaster = Toaster(self.body, self.anim, font=self.fonts["small"], offset_y=12)
-        self.settings = SettingsPanel(body, self.anim, self.fonts, self.cfg,
-                                      on_change=self._setting_changed,
-                                      on_pick_root=self._pick_root,
-                                      on_download=self._download_models)
-        self.help_panel = HelpPanel(body, self.anim, self.fonts,
-                                    on_run=self._fill_and_focus)
-        self.root.bind("<Configure>", lambda e: self._apply_responsive())
+        self._build_sidebar()
 
-    # ------------------------------------------------------------- header
-    def _build_header(self) -> None:
-        head = tk.Frame(self.root, bg=T.BG, height=58)
-        head.grid(row=0, column=0, sticky="ew", padx=T.PAD, pady=(T.PAD_S, 2))
-        head.pack_propagate(False)
+        # ===================== 4. LIVE INTENT PREVIEW & QUICK CHIPS =====================
+        self.preview_bar = tk.Frame(
+            self.root,
+            bg=p["panel"],
+            highlightthickness=1,
+            highlightbackground=p["border"],
+        )
+        self.preview_bar.pack(fill="x", padx=16, pady=(6, 2))
 
-        mark = tk.Canvas(head, width=30, height=30, bg=T.BG, highlightthickness=0, bd=0)
-        mark.pack(side="left", pady=6)
-        from .ui.widgets import draw_round_rect
-        draw_round_rect(mark, 1, 1, 29, 29, 9, T.mix(T.ACCENT, T.ACCENT2, 0.5))
-        mark.create_text(15, 15, text=T.SYM["sparkle"], fill="#ffffff",
-                         font=(self.fonts["ui"], 13, "bold"))
+        self.lbl_preview_icon = tk.Label(
+            self.preview_bar,
+            text="✨",
+            font=FONT_UI_BOLD,
+            bg=p["panel"],
+            fg=p["accent"],
+            padx=8,
+            pady=4,
+        )
+        self.lbl_preview_icon.pack(side="left")
 
-        tk.Label(head, text=APP_NAME, bg=T.BG, fg=T.FG,
-                 font=(self.fonts["ui"], 14, "bold")).pack(side="left", padx=(8, 6), pady=6)
-        tk.Label(head, text=f"v{__version__}", bg=T.BG, fg=T.FG_FAINT,
-                 font=self.fonts["tiny"]).pack(side="left", pady=(10, 0))
+        self.lbl_preview_title = tk.Label(
+            self.preview_bar,
+            text="Ready for voice or text command",
+            font=FONT_UI_BOLD,
+            bg=p["panel"],
+            fg=p["fg"],
+            anchor="w",
+        )
+        self.lbl_preview_title.pack(side="left")
 
-        # right-hand cluster
-        tools = tk.Frame(head, bg=T.BG)
-        tools.pack(side="right", pady=6)
-        self.btn_settings = IconButton(tools, glyph=T.SYM["settings"], command=self.open_settings,
-                                       animator=self.anim, bg=T.BG, size=34)
-        self.btn_settings.pack(side="right", padx=(6, 0))
-        Tooltip(self.btn_settings, "Settings  (Ctrl+,)", font=self.fonts["tiny"])
-        self.btn_models = IconButton(tools, glyph=T.SYM["models"], command=self._download_models,
-                                     animator=self.anim, bg=T.BG, size=34)
-        self.btn_models.pack(side="right", padx=(6, 0))
-        Tooltip(self.btn_models, "Download the offline speech model once (~40 MB)",
-                font=self.fonts["tiny"])
-        self.btn_undo = IconButton(tools, glyph=T.SYM["undo"], command=lambda: self.submit("undo"),
-                                   animator=self.anim, bg=T.BG, size=34)
-        self.btn_undo.pack(side="right", padx=(6, 0))
-        Tooltip(self.btn_undo, "Undo the last action  (Ctrl+Z)", font=self.fonts["tiny"])
+        self.lbl_preview_sub = tk.Label(
+            self.preview_bar,
+            text="",
+            font=FONT_SUB,
+            bg=p["panel"],
+            fg=p["dim"],
+            anchor="w",
+            padx=8,
+        )
+        self.lbl_preview_sub.pack(side="left", fill="x", expand=True)
 
-        chips = tk.Frame(head, bg=T.BG)
-        chips.pack(side="right", pady=8, padx=(0, 12))
-        self.chip_root = Chip(chips, text="folder", state="ready", animator=self.anim,
-                              command=self._pick_root, font=self.fonts["small"], bg=T.BG)
-        self.chip_root.pack(side="right", padx=4)
-        Tooltip(self.chip_root, "Working folder — click to change", font=self.fonts["tiny"])
-        self.chip_voice = Chip(chips, text="voice", state="off", animator=self.anim,
-                               command=self.open_settings, font=self.fonts["small"], bg=T.BG)
-        self.chip_voice.pack(side="right", padx=4)
-        self.chip_llm = Chip(chips, text="llm", state="off", animator=self.anim,
-                             command=self.open_settings, font=self.fonts["small"], bg=T.BG)
-        self.chip_llm.pack(side="right", padx=4)
-        tk.Frame(self.root, bg=T.BORDER, height=1).grid(row=1, column=0, sticky="ew")
+        # Quick-Action Chips Row
+        self.chips_row = tk.Frame(self.root, bg=p["bg"])
+        self.chips_row.pack(fill="x", padx=16, pady=(2, 3))
+        self.quick_buttons: list[tk.Button] = []
+        for qc in ui_helpers.QUICK_CHIPS:
+            b = tk.Button(
+                self.chips_row,
+                text=qc.label,
+                font=FONT_CHIP,
+                bg=p["panel2"],
+                fg=p["fg_secondary"],
+                activebackground=p["panel_hover"],
+                activeforeground=p["fg"],
+                bd=0,
+                padx=9,
+                pady=3,
+                cursor="hand2",
+                command=lambda c=qc: self._on_quick_chip(c),
+            )
+            b.pack(side="left", padx=(0, 5))
+            self.quick_buttons.append(b)
 
-    # ----------------------------------------------------------- composer
-    def _build_composer(self) -> None:
-        wrap = tk.Frame(self.root, bg=T.BG)
-        wrap.grid(row=3, column=0, sticky="ew", padx=T.PAD, pady=(0, 6))
-        wrap.grid_columnconfigure(0, weight=1)
+        # ===================== 5. INPUT DOCK =====================
+        self.input_row = tk.Frame(self.root, bg=p["bg"])
+        self.input_row.pack(fill="x", padx=16, pady=(2, 6))
 
-        # suggestion pills (appear as you type, Tab/click to accept)
-        self.suggest_row = tk.Frame(wrap, bg=T.BG)
-        self.suggest_buttons: list[RoundedButton] = []
+        self.entry = tk.Entry(
+            self.input_row,
+            font=FONT_MONO,
+            bg=p["panel2"],
+            fg=p["fg"],
+            insertbackground=p["fg"],
+            relief="flat",
+            highlightthickness=1,
+            highlightbackground=p["border"],
+            highlightcolor=p["accent"],
+        )
+        self.entry.pack(side="left", fill="x", expand=True, ipady=8, padx=(0, 8))
+        self.entry.bind("<Return>", lambda e: self._on_enter())
+        self.entry.bind("<Up>", lambda e: self._on_hist(-1))
+        self.entry.bind("<Down>", lambda e: self._on_hist(1))
+        self.entry.bind("<KeyRelease>", lambda e: self._update_intent_preview())
+        self.entry.bind("<Tab>", self._on_tab_complete)
+        self.entry.focus_set()
 
-        box = Card(wrap, animator=self.anim, fill=T.BG_RAISED, border=T.BORDER_HI,
-                   radius=T.RADIUS_LG, padding=8, hug=False, height=54)
-        box.grid(row=1, column=0, sticky="ew")
-        self.composer = box
-        row = tk.Frame(box.body, bg=T.BG_RAISED)
-        row.pack(fill="both", expand=True)
+        self.btn_send = ttk.Button(
+            self.input_row,
+            text="Send ↵",
+            style="Accent.TButton",
+            command=self._on_enter,
+        )
+        self.btn_send.pack(side="left", padx=(0, 6))
 
-        self.input = tk.Text(row, height=1, bg=T.BG_RAISED, fg=T.FG, relief="flat",
-                             insertbackground=T.ACCENT_HI, wrap="word",
-                             font=self.fonts["body"], highlightthickness=0,
-                             padx=6, pady=6, spacing1=2, spacing2=2, undo=True,
-                             maxundo=50, selectbackground=T.ACCENT_LO)
-        self.input.pack(side="left", fill="both", expand=True)
-        self._placeholder = "tell me what to do — 'create folder reports', 'organize downloads'…"
-        self.input.insert("1.0", self._placeholder)
-        self.input.configure(fg=T.FG_FAINT)
-        self._placeholder_on = True
-        self.input.bind("<FocusIn>", self._placeholder_focus)
-        self.input.bind("<KeyRelease>", self._on_key_release)
-        self.input.bind("<Return>", self._on_return)
-        self.input.bind("<Shift-Return>", lambda e: None)
-        self.input.bind("<Up>", lambda e: self._history_step(-1))
-        self.input.bind("<Down>", lambda e: self._history_step(1))
-        self.input.bind("<Tab>", lambda e: self._accept_suggestion())
-        self.input.bind("<Escape>", lambda e: self._escape())
-
-        btns = tk.Frame(row, bg=T.BG_RAISED)
-        btns.pack(side="right")
-        self.btn_send = RoundedButton(btns, text="Send", glyph=T.SYM["send"], primary=True,
-                                      command=self._send_clicked, animator=self.anim,
-                                      font=self.fonts["small_bold"], bg=T.BG_RAISED,
-                                      pad_x=12, pad_y=7)
-        self.btn_send.pack(side="right", padx=(6, 0))
-        self.btn_mic = IconButton(btns, glyph=T.SYM["mic"], command=self.toggle_mic,
-                                  animator=self.anim, bg=T.BG_RAISED, size=34)
         if not self.text_only:
-            self.btn_mic.pack(side="right", padx=(6, 0))
-            Tooltip(self.btn_mic, "Voice command  (F2)", font=self.fonts["tiny"])
-        else:
-            self.btn_mic.pack_forget()
-        self.thinking = None   # created lazily next to the send button
+            self.btn_mic = tk.Button(
+                self.input_row,
+                text="🎤",
+                font=(UI_FONT_FAMILY, 12),
+                bd=0,
+                bg=p["panel2"],
+                fg=p["fg"],
+                activebackground=p["panel_hover"],
+                activeforeground=p["fg"],
+                width=4,
+                cursor="hand2",
+                command=self._toggle_mic,
+            )
+            self.btn_mic.pack(side="left", padx=(0, 6))
 
-    # ------------------------------------------------------------- status
-    def _build_status(self) -> None:
-        bar = tk.Frame(self.root, bg=T.BG)
-        bar.grid(row=4, column=0, sticky="ew", padx=T.PAD, pady=(0, T.PAD_S))
-        self.status_lbl = tk.Label(bar, text="ready", bg=T.BG, fg=T.FG_DIM,
-                                   font=self.fonts["small"], anchor="w")
-        self.status_lbl.pack(side="left")
-        self.status_bar = ProgressBar(bar, animator=self.anim, height=4)
-        tk.Label(bar, text=logic.keys_hint(), bg=T.BG, fg=T.FG_FAINT,
-                 font=self.fonts["tiny"]).pack(side="right")
+        ttk.Button(self.input_row, text="📂 Root", command=self._pick_root).pack(side="left", padx=(0, 6))
+        self.btn_dl = ttk.Button(self.input_row, text="⬇ Models", command=self._download_models)
+        self.btn_dl.pack(side="left", padx=(0, 6))
+        ttk.Button(self.input_row, text="⚙ Settings", command=self._settings).pack(side="left")
 
-    # =====================================================================
-    # keyboard & input behaviour
-    # =====================================================================
-    def _bind_keys(self) -> None:
-        r = self.root
-        r.bind("<F1>", lambda e: self.open_help())
-        r.bind("<F2>", lambda e: self.toggle_mic())
-        r.bind("<Control-z>", lambda e: self.submit("undo"))
-        r.bind("<Control-k>", lambda e: self.clear_chat())
-        r.bind("<Control-l>", lambda e: self._focus_input())
-        r.bind("<Control-comma>", lambda e: self.open_settings())
-        r.bind("<Control-q>", lambda e: self._on_close())
-        r.bind("<Escape>", lambda e: self._escape())
-        r.bind("<F5>", lambda e: self.folder_card.refresh(self.engine.root))
-        r.bind("<Control-plus>", lambda e: self._zoom(1))
-        r.bind("<Control-minus>", lambda e: self._zoom(-1))
+        # ===================== 6. STATUS BAR =====================
+        self.status_bar = tk.Frame(self.root, bg=p["panel"])
+        self.status_bar.pack(fill="x", side="bottom")
+        self.status = tk.Label(
+            self.status_bar,
+            text="ready",
+            bg=p["panel"],
+            fg=p["dim"],
+            font=FONT_SUB,
+            anchor="w",
+        )
+        self.status.pack(side="left", fill="x", expand=True, padx=12, pady=4)
+        self.lbl_footer = tk.Label(
+            self.status_bar,
+            text=f"{APP_NAME} v{__version__} · 100% offline · Tab=complete · Ctrl+Z=undo",
+            bg=p["panel"],
+            fg=p["dim"],
+            font=FONT_SUB,
+        )
+        self.lbl_footer.pack(side="right", padx=12, pady=4)
 
-    def _zoom(self, delta: int) -> None:
-        self._zoom_level = max(-3, min(5, getattr(self, "_zoom_level", 0) + delta))
-        base = T.SIZE_BODY + self._zoom_level
-        self.input.configure(font=(self.fonts["ui"], base))
-        self.chat.text.configure(font=(self.fonts["ui"], base))
-        for tag, size in (("body", base), ("body_you", base), ("card", base - 1),
-                          ("small", base - 1), ("small_bold", base - 1),
-                          ("tiny", base - 2), ("meta", base - 2)):
-            try:
-                self.chat.text.tag_configure(tag, font=(self.fonts["ui"], size))
-            except tk.TclError:
-                pass
-        self.toast(f"Text size {base} pt", "info")
+    def _build_sidebar(self) -> None:
+        p = self.pal
+        sh = tk.Frame(self.sidebar, bg=p["panel"])
+        sh.pack(fill="x", padx=10, pady=(8, 4))
+        self.lbl_side_title = tk.Label(
+            sh,
+            text="LIVE WORKSPACE",
+            font=FONT_CHIP,
+            bg=p["panel"],
+            fg=p["dim"],
+        )
+        self.lbl_side_title.pack(side="left")
+        self.btn_refresh = tk.Button(
+            sh,
+            text="↻",
+            font=FONT_UI_BOLD,
+            bg=p["panel"],
+            fg=p["dim"],
+            bd=0,
+            cursor="hand2",
+            command=lambda: self._refresh_workspace(animate_diff=False),
+        )
+        self.btn_refresh.pack(side="right")
 
-    def _placeholder_focus(self, _e=None) -> None:
-        if self._placeholder_on:
-            self.input.delete("1.0", "end")
-            self.input.configure(fg=T.FG)
-            self._placeholder_on = False
+        # Instant filter bar inside sidebar
+        ff = tk.Frame(self.sidebar, bg=p["panel"])
+        ff.pack(fill="x", padx=10, pady=(0, 6))
+        self.filter_var = tk.StringVar(value="")
+        self.filter_entry = tk.Entry(
+            ff,
+            textvariable=self.filter_var,
+            font=FONT_MONO_S,
+            bg=p["panel2"],
+            fg=p["fg"],
+            insertbackground=p["fg"],
+            relief="flat",
+        )
+        self.filter_entry.pack(fill="x", ipady=4)
+        self.filter_entry.bind("<KeyRelease>", lambda e: self._render_file_list())
 
-    def _input_text(self) -> str:
-        return "" if self._placeholder_on else self.input.get("1.0", "end-1c").strip()
+        # File listbox
+        self.file_list = tk.Listbox(
+            self.sidebar,
+            bg=p["panel"],
+            fg=p["fg"],
+            selectbackground=p["accent_soft"],
+            selectforeground=p["accent"],
+            font=FONT_MONO_S,
+            relief="flat",
+            bd=0,
+            highlightthickness=0,
+            activestyle="none",
+        )
+        self.file_list.pack(fill="both", expand=True, padx=8, pady=2)
+        self.file_list.bind("<<ListboxSelect>>", self._on_file_select)
+        self.file_list.bind("<Double-Button-1>", self._on_file_double_click)
 
-    def _set_input(self, text: str, caret_at_end: bool = True) -> None:
-        self._placeholder_on = False
-        self.input.configure(fg=T.FG)
-        self.input.delete("1.0", "end")
-        self.input.insert("1.0", text)
-        if caret_at_end:
-            self.input.mark_set("insert", "end-1c")
-        self.input.focus_set()
-        self._update_suggestions()
+        # Quick Context Action Bar for selected item
+        self.side_actions = tk.Frame(self.sidebar, bg=p["panel2"])
+        self.side_actions.pack(fill="x", side="bottom", padx=8, pady=8)
+        for lbl, act in (
+            ("↗ Open", "open"),
+            ("✏️ Rename", "rename"),
+            ("✨ Organize", "organize"),
+            ("♻️ Trash", "delete"),
+        ):
+            tk.Button(
+                self.side_actions,
+                text=lbl,
+                font=FONT_CHIP,
+                bg=p["panel2"],
+                fg=p["fg_secondary"],
+                bd=0,
+                padx=5,
+                pady=4,
+                cursor="hand2",
+                command=lambda a=act: self._on_sidebar_action(a),
+            ).pack(side="left", expand=True, fill="x")
 
-    def _focus_input(self) -> None:
-        self.input.focus_set()
+    def _configure_chat_tags(self) -> None:
+        p = self.pal
+        self.chat.tag_configure("you_badge", foreground=p["accent"], font=FONT_MONO_B)
+        self.chat.tag_configure("you", foreground=p["user_msg"], font=FONT_MONO)
+        self.chat.tag_configure("thans_badge", foreground=p["ok"], font=FONT_MONO_B)
+        self.chat.tag_configure("thans", foreground=p["asst_msg"], font=FONT_MONO)
+        self.chat.tag_configure("sys", foreground=p["dim"], font=FONT_MONO_S)
+        self.chat.tag_configure("err", foreground=p["err"], font=FONT_MONO_S)
+        self.chat.tag_configure("cmd", foreground=p["cmd_pill"], font=FONT_MONO_S)
 
-    def _focus_find(self) -> None:
-        self._set_input("find ")
-        self.toast("Type a name or extension (e.g. 'find invoice', 'search for pdf files')")
+    def _bind_shortcuts(self) -> None:
+        self.root.bind("<Control-k>", lambda e: self.entry.focus_set())
+        self.root.bind("<Control-z>", lambda e: self._submit("undo"))
+        self.root.bind("<Control-l>", lambda e: self.clear_chat())
+        self.root.bind("<Control-b>", lambda e: self.toggle_sidebar())
+        self.root.bind("<Control-t>", lambda e: self.toggle_theme())
+        if not self.text_only:
+            self.root.bind("<F2>", lambda e: self._toggle_mic())
 
-    def _escape(self) -> None:
-        if self.settings.is_open:
-            self.settings.close()
-            return
-        if self.help_panel.is_open:
-            self.help_panel.close()
-            return
-        if self._input_text():
-            self._set_input("")
-            return
-        if self.mic_on:
-            self.toggle_mic()
+    # ------------------------------------------------------------ welcome
+    def _welcome(self) -> None:
+        s = model_manager.status(self.cfg)
+        self._post(
+            "sys",
+            f"Welcome to {APP_NAME} — type or speak a file command, or click any quick chip below. "
+            f"Say 'help' for the full command reference.",
+            "★ ",
+        )
+        if not self.text_only and not (s["stt"] and s["stt_deps"]):
+            self._post(
+                "sys",
+                "Voice input needs the STT model: click '⬇ Models' once (~40 MB download), "
+                "or just use text commands & quick chips.",
+                "⚠ ",
+            )
+        self._set_status(f"working folder: {self.engine.current}")
 
-    def _on_return(self, _e=None):
-        if _e is not None and (_e.state & 0x0001):        # Shift+Return → newline
-            return None
-        self._send_clicked()
-        return "break"
-
-    def _send_clicked(self) -> None:
-        text = self._input_text()
-        if not text:
-            self._shake_composer()
-            return
-        self._set_input("")
-        self.submit(text)
-
-    def _shake_composer(self) -> None:
-        """Little head-shake when Enter is pressed with an empty box."""
-        if self.anim is None:
-            self.input.configure(bg=T.mix(T.BG_RAISED, T.ERR, 0.18))
-            self.root.after(220, lambda: self.input.configure(bg=T.BG_RAISED))
-            return
-        self.anim.add(logic.Tween(0.24, easing=logic.out_quart,
-                                  on_update=self._nudge_composer,
-                                  on_done=lambda: self.input.configure(bg=T.BG_RAISED,
-                                                                       padx=6)))
-
-    def _nudge_composer(self, v: float) -> None:
-        import math
-        wobble = math.sin(v * math.pi * 3) * (1 - v)
-        self.input.configure(padx=6 + int(wobble * 7),
-                             bg=T.mix(T.BG_RAISED, T.ERR, 0.18 * (1 - v)))
-
-    # ------------------------------------------------------------- history
-    def _history_step(self, delta: int) -> str:
-        """Up/Down browse previous commands; leaving the list restores the draft."""
-        if not self.history:
-            return "break"
-        if self._hist_i is None:
-            self._draft = self._input_text()
-            self._hist_i = len(self.history)
-        self._hist_i = max(0, min(len(self.history), self._hist_i + delta))
-        if self._hist_i >= len(self.history):
-            self._hist_i = None
-            self._set_input(self._draft)          # back to what was being typed
-        else:
-            self._set_input(self.history[self._hist_i])
-        return "break"
-
-    # ---------------------------------------------------------- suggestions
-    def _on_key_release(self, _e=None) -> None:
-        self._update_suggestions()
-
-    def _update_suggestions(self) -> None:
-        text = self._input_text()
-        names, dirs = [], []
-        if self.engine is not None:
-            try:
-                names = [p.name for p in self.engine.current.iterdir()][:80]
-                dirs = [p.name for p in self.engine.current.iterdir() if p.is_dir()][:40]
-            except OSError:
-                pass
-        items = logic.suggest(text, names, dirs, limit=4)
-        self._render_suggestions(items)
-
-    def _render_suggestions(self, items: list[str]) -> None:
-        if not items or self._placeholder_on:
-            if self.suggest_row.winfo_ismapped():
-                self.suggest_row.pack_forget()
-            return
-        for b in self.suggest_buttons:
-            b.destroy()
-        self.suggest_buttons.clear()
-        for i, item in enumerate(items):
-            b = RoundedButton(self.suggest_row, text=logic.truncate(item, 28),
-                              command=lambda t=item: self._accept_suggestion(t),
-                              animator=self.anim, subtle=True, pad_x=9, pad_y=3,
-                              font=self.fonts["tiny"], bg=T.BG)
-            b.pack(side="left", padx=(0, 6))
-            self.suggest_buttons.append(b)
-            if self.anim is not None:
-                b.anim_to(lambda v, bb=b: bb.configure(bg=T.BG), 0.01)
-        if not self.suggest_row.winfo_ismapped():
-            self.suggest_row.grid(row=0, column=0, sticky="w", pady=(0, 5))
-
-    def _accept_suggestion(self, text: str | None = None) -> str:
-        if text is None:
-            text = self._input_text()
-            names, dirs = [], []
-            if self.engine is not None:
-                try:
-                    names = [p.name for p in self.engine.current.iterdir()][:80]
-                    dirs = [p.name for p in self.engine.current.iterdir() if p.is_dir()][:40]
-                except OSError:
-                    pass
-            choices = logic.suggest(text, names, dirs, limit=1)
-            if not choices:
-                return "break"
-            text = choices[0]
-        self._set_input(text)
-        if text.endswith(("<name>", "<text>", "<old>", "<new>", "<item>", "<folder>")):
-            self.input.mark_set("insert", "end-1c")
-        return "break"
-
-    def _starter_clicked(self, command: str) -> None:
-        self._set_input(command)
-        self.input.focus_set()
-
-    # =====================================================================
-    # command flow
-    # =====================================================================
-    def submit(self, text: str) -> None:
-        """Run a command: transcript entry → worker thread → streamed reply."""
-        text = (text or "").strip()
-        if not text:
-            return
-        if text.casefold() in ("help", "?", "show help"):
-            self.open_help()                  # nicer than a wall of text
-            return
-        self._set_status("thinking…")
-        self.hide_hero()
-        self.chat.finish_streams()
-        self.chat.add_user(text)
-        self.history = [h for h in self.history if h != text] + [text]
-        self._hist_i, self._draft = None, "",
-        self._render_suggestions([])
-        self._set_busy(True)
-        threading.Thread(target=self._worker, args=(text,), daemon=True).start()
-
-    def _worker(self, text: str) -> None:
-        started = time.time()
+    # ------------------------------------------------------------ animations
+    def _draw_sonic_canvas(self) -> None:
         try:
-            res = self.engine.run(text)
-            elapsed = time.time() - started
-            self._q.put(("reply", res, elapsed))
-        except Exception:                      # noqa: BLE001
-            self._q.put(("crash", traceback.format_exc(limit=6), None))
+            self.sonic_canvas.delete("all")
+            w = int(self.sonic_canvas.cget("width") or 190)
+            h = int(self.sonic_canvas.cget("height") or 30)
+            geom = animations.compute_sonic_waves(
+                w, h, phase=self.sonic_phase, state=self.sonic_state, level=self.sonic_level
+            )
+            orb = geom["orb"]
+            r = orb["r"]
+            gr = orb["glow_r"]
+            cx, cy = orb["cx"], orb["cy"]
+            glow_col = animations.lerp_color(self.pal["panel"], orb["color"], 0.32)
+            self.sonic_canvas.create_oval(
+                cx - gr, cy - gr, cx + gr, cy + gr, fill=glow_col, outline=""
+            )
+            for rib in reversed(geom["ribbons"]):
+                self.sonic_canvas.create_line(
+                    *rib["coords"], fill=rib["color"], width=rib["width"], smooth=True
+                )
+            self.sonic_canvas.create_oval(
+                cx - r, cy - r, cx + r, cy + r, fill=orb["color"], outline=""
+            )
+        except Exception:
+            pass
 
-    def _on_reply(self, res, elapsed: float | None) -> None:
-        self._set_busy(False)
-        self.chat.add_reply(res.message, ok=res.ok, source=res.source,
-                            card=len(res.message) > 260)
-        self._set_status(self._status_line())
-        if self.cfg.get("tts") and self.speaker:
-            self.speaker.say(res.message)
-        if res.ok:
-            if res.command:
-                self.quick_card.buttons["undo"].set_enabled(True)
-            if logic.should_celebrate(res.command, res.ok):
-                self._burst()
+    def _animate_tick(self) -> None:
+        if self._closing:
+            return
+        if self.animations_on:
+            speed = 0.24 if self.sonic_state != "idle" else 0.09
+            self.sonic_phase = (self.sonic_phase + speed) % (62.83)
+            if self._flash_ticks > 0:
+                self._flash_ticks -= 1
+                if self._flash_ticks == 0 and not self.mic_on and not self.busy:
+                    self.sonic_state = "idle"
+            self._draw_sonic_canvas()
+
+            # File diff emerald highlight pulse decay
+            if self._highlight_step > 0:
+                self._highlight_step -= 1
+                self._apply_list_highlights()
+
+        # Toast auto-dismiss
+        if self._toast_ticks > 0:
+            self._toast_ticks -= 1
+            if self._toast_ticks == 0:
+                try:
+                    self.toast_bar.pack_forget()
+                except Exception:
+                    pass
+
+        self.root.after(45, self._animate_tick)
+
+    def show_toast(self, text: str, kind: str = "info") -> None:
+        p = self.pal
+        bg_map = {
+            "info": (p["accent_soft"], p["accent"]),
+            "ok": (p["ok_soft"], p["ok"]),
+            "warn": (p["warn_soft"], p["warn"]),
+            "err": (p["err_soft"], p["err"]),
+        }
+        bg_c, fg_c = bg_map.get(kind, bg_map["info"])
+        self.toast_bar.config(text=text, bg=bg_c, fg=fg_c)
+        try:
+            self.toast_bar.pack(fill="x", side="top", before=self.chat)
+        except Exception:
+            self.toast_bar.pack(fill="x", side="top")
+        self._toast_ticks = 48  # ~2.2 seconds
+
+    # ------------------------------------------------------------ theme & sidebar
+    def toggle_theme(self) -> None:
+        old_pal = dict(self.pal)
+        self.theme_name = "light" if self.theme_name == "dark" else "dark"
+        self.cfg["theme"] = self.theme_name
+        config.save_config(self.cfg)
+        target_pal = animations.get_theme(self.theme_name)
+
+        if not self.animations_on:
+            self.pal = target_pal
+            self._apply_palette()
+            return
+
+        # Smooth 6-step cross-fade transition
+        steps = 6
+
+        def step_fn(i: int) -> None:
+            t = animations.ease_in_out_sine(i / float(steps))
+            blended = {
+                k: animations.lerp_color(old_pal[k], target_pal[k], t)
+                for k in target_pal
+            }
+            self.pal = blended
+            self._apply_palette()
+            if i < steps:
+                self.root.after(22, lambda: step_fn(i + 1))
+
+        step_fn(1)
+        self.show_toast(f"Switched to {self.theme_name.title()} theme", "info")
+
+    def _apply_palette(self) -> None:
+        p = self.pal
+        self._style()
+        self.root.configure(bg=p["bg"])
+        self.head.configure(bg=p["bg"])
+        self.lbl_title.configure(bg=p["bg"], fg=p["fg"])
+        self.lbl_sub.configure(bg=p["bg"], fg=p["dim"])
+        self.cframe.configure(bg=p["bg"])
+        self.sonic_canvas.configure(bg=p["panel"], highlightbackground=p["border"])
+        self.btn_theme.configure(
+            text="☀️" if self.theme_name == "dark" else "🌙",
+            bg=p["panel2"],
+            fg=p["fg"],
+        )
+        self.btn_sidebar.configure(
+            bg=p["accent_soft"] if self.sidebar_open else p["panel2"],
+            fg=p["accent"] if self.sidebar_open else p["fg"],
+        )
+        self.nav_bar.configure(bg=p["panel"], highlightbackground=p["border"])
+        self.btn_up.configure(bg=p["panel2"], fg=p["fg"] if (self.snapshot and self.snapshot.can_go_up) else p["dim"])
+        self.crumb_frame.configure(bg=p["panel"])
+        self.lbl_counts.configure(bg=p["panel"], fg=p["dim"])
+        self.body.configure(bg=p["bg"])
+        self.chat_pane.configure(bg=p["panel"], highlightbackground=p["border"])
+        self.chat.configure(bg=p["panel"], fg=p["fg"], insertbackground=p["fg"])
+        self._configure_chat_tags()
+        self.sidebar.configure(bg=p["panel"], highlightbackground=p["border"])
+        self.lbl_side_title.configure(bg=p["panel"], fg=p["dim"])
+        self.btn_refresh.configure(bg=p["panel"], fg=p["dim"])
+        self.filter_entry.configure(bg=p["panel2"], fg=p["fg"], insertbackground=p["fg"])
+        self.file_list.configure(
+            bg=p["panel"],
+            fg=p["fg"],
+            selectbackground=p["accent_soft"],
+            selectforeground=p["accent"],
+        )
+        self.side_actions.configure(bg=p["panel2"])
+        self.preview_bar.configure(bg=p["panel"], highlightbackground=p["border"])
+        self.lbl_preview_icon.configure(bg=p["panel"])
+        self.lbl_preview_title.configure(bg=p["panel"], fg=p["fg"])
+        self.lbl_preview_sub.configure(bg=p["panel"], fg=p["dim"])
+        self.chips_row.configure(bg=p["bg"])
+        for b in self.quick_buttons:
+            b.configure(bg=p["panel2"], fg=p["fg_secondary"], activebackground=p["panel_hover"])
+        self.input_row.configure(bg=p["bg"])
+        self.entry.configure(
+            bg=p["panel2"],
+            fg=p["fg"],
+            insertbackground=p["fg"],
+            highlightbackground=p["border"],
+            highlightcolor=p["accent"],
+        )
+        if hasattr(self, "btn_mic"):
+            self.btn_mic.configure(bg=p["err"] if self.mic_on else p["panel2"], fg=p["fg"])
+        self.status_bar.configure(bg=p["panel"])
+        self.status.configure(bg=p["panel"], fg=p["dim"])
+        self.lbl_footer.configure(bg=p["panel"], fg=p["dim"])
+        self._refresh_chips()
+        self._render_breadcrumbs()
+        self._draw_sonic_canvas()
+
+    def toggle_sidebar(self) -> None:
+        self.sidebar_open = not self.sidebar_open
+        self.cfg["sidebar"] = self.sidebar_open
+        config.save_config(self.cfg)
+        if self.sidebar_open:
+            self.sidebar.pack(side="right", fill="y", padx=(10, 0))
+            self.sidebar.pack_propagate(False)
+            self._refresh_workspace(animate_diff=False)
         else:
-            self.toast(logic.truncate(res.message, 64), "error")
-        self.folder_card.refresh(self.engine.root)
-        if self.settings.is_open:
-            self.settings.set_root_label(str(self.engine.root))
+            self.sidebar.pack_forget()
+        self.btn_sidebar.configure(
+            bg=self.pal["accent_soft"] if self.sidebar_open else self.pal["panel2"],
+            fg=self.pal["accent"] if self.sidebar_open else self.pal["fg"],
+        )
 
-    def _burst(self) -> None:
-        from .ui.widgets import Burst
-        w = max(320, self.chat_card.winfo_width())
-        h = max(160, min(240, self.chat_card.winfo_height()))
-        b = Burst(self.chat_card, self.anim, size=(w, h))
-        b.place(relx=0, rely=0.5, anchor="w", width=w, height=h)
-        b.fire()
+    # ------------------------------------------------------------ workspace & breadcrumbs
+    def _refresh_workspace(self, animate_diff: bool = True) -> None:
+        prev = self.snapshot if animate_diff else None
+        q = self.filter_var.get() if hasattr(self, "filter_var") else ""
+        self.snapshot = ui_helpers.dir_snapshot(self.engine.root, self.engine.current, prev=prev, filter_query=q)
+        self._render_breadcrumbs()
+        self._render_file_list()
+        self._refresh_chips()
+
+        if animate_diff and self.snapshot.changed_names:
+            self._highlight_names = set(self.snapshot.changed_names)
+            self._highlight_step = 18
+            self._apply_list_highlights()
+
+    def _render_breadcrumbs(self) -> None:
+        p = self.pal
+        for child in list(self.crumb_frame.winfo_children()):
+            child.destroy()
+
+        if not self.snapshot:
+            return
+
+        self.btn_up.configure(
+            state="normal" if self.snapshot.can_go_up else "disabled",
+            fg=p["fg"] if self.snapshot.can_go_up else p["dim"],
+        )
+        for idx, (label, target) in enumerate(self.snapshot.breadcrumbs):
+            if idx > 0:
+                tk.Label(self.crumb_frame, text="›", font=FONT_SUB, bg=p["panel"], fg=p["dim"]).pack(
+                    side="left", padx=2
+                )
+            is_last = idx == len(self.snapshot.breadcrumbs) - 1
+            btn = tk.Button(
+                self.crumb_frame,
+                text=label,
+                font=FONT_UI_BOLD if is_last else FONT_UI,
+                bg=p["accent_soft"] if is_last else p["panel"],
+                fg=p["accent"] if is_last else p["fg_secondary"],
+                bd=0,
+                padx=6,
+                pady=2,
+                cursor="hand2",
+                command=lambda t=target: self._submit(f"go to {t}" if t != "~" else "cd"),
+            )
+            btn.pack(side="left", padx=1)
+
+        self.lbl_counts.configure(
+            text=f"{self.snapshot.folder_count} folders · {self.snapshot.file_count} files"
+        )
+
+    def _render_file_list(self) -> None:
+        if not hasattr(self, "file_list"):
+            return
+        q = self.filter_var.get().strip().lower() if hasattr(self, "filter_var") else ""
+        self.file_list.delete(0, "end")
+        self._visible_entries: list[ui_helpers.DirEntry] = []
+
+        if not self.snapshot:
+            return
+
+        for entry in self.snapshot.entries:
+            if q and q not in entry.name.lower():
+                continue
+            self._visible_entries.append(entry)
+            row_txt = f" {entry.icon}  {entry.name:<22}  {entry.size_label}"
+            self.file_list.insert("end", row_txt)
+
+        if not self._visible_entries:
+            self.file_list.insert("end", "   (no matching items)")
+
+        self._apply_list_highlights()
+
+    def _apply_list_highlights(self) -> None:
+        if not hasattr(self, "file_list") or not getattr(self, "_visible_entries", None):
+            return
+        p = self.pal
+        intensity = animations.pulse_intensity(18 - self._highlight_step, 18) if self._highlight_step > 0 else 0.0
+        hl_bg = animations.lerp_color(p["panel"], p["ok_soft"], intensity)
+        hl_fg = animations.lerp_color(p["fg"], p["ok"], intensity)
+        for idx, entry in enumerate(self._visible_entries):
+            try:
+                if entry.name in self._highlight_names and self._highlight_step > 0:
+                    self.file_list.itemconfig(idx, bg=hl_bg, fg=hl_fg)
+                else:
+                    self.file_list.itemconfig(idx, bg=p["panel"], fg=p["fg"])
+            except Exception:
+                pass
+
+    def _on_file_select(self, _event=None) -> None:
+        try:
+            sel = self.file_list.curselection()
+            if sel and sel[0] < len(getattr(self, "_visible_entries", [])):
+                self._selected_entry = self._visible_entries[sel[0]]
+        except Exception:
+            self._selected_entry = None
+
+    def _on_file_double_click(self, _event=None) -> None:
+        self._on_file_select()
+        entry = self._selected_entry
+        if not entry:
+            return
+        if entry.is_dir:
+            self._submit(f"go to {entry.name}")
+        else:
+            self._submit(f"open {entry.name}")
+
+    def _on_sidebar_action(self, action: str) -> None:
+        entry = self._selected_entry
+        if action == "organize" and not entry:
+            self._submit("organize")
+            return
+        if not entry:
+            self.show_toast("Select a file or folder in the sidebar first", "warn")
+            return
+        if action == "open":
+            self._submit(f"go to {entry.name}" if entry.is_dir else f"open {entry.name}")
+        elif action == "delete":
+            self._submit(f"delete {entry.name}")
+        elif action == "organize":
+            self._submit(f"organize {entry.name}" if entry.is_dir else "organize")
+        elif action == "rename":
+            self.entry.delete(0, "end")
+            self.entry.insert(0, f"rename {entry.name} to ")
+            self.entry.focus_set()
+            self._update_intent_preview()
+
+    # ------------------------------------------------------------ live preview & chips
+    def _update_intent_preview(self) -> None:
+        text = self.entry.get()
+        prev = ui_helpers.preview_intent(text, self.engine.current)
+        p = self.pal
+        color_map = {
+            "idle": p["dim"],
+            "matched": p["ok"],
+            "partial": p["accent"],
+            "unknown": p["warn"],
+        }
+        fg_c = color_map.get(prev.state, p["accent"])
+        self.lbl_preview_icon.configure(text=prev.icon, fg=fg_c)
+        self.lbl_preview_title.configure(text=prev.title, fg=fg_c if prev.state == "matched" else p["fg"])
+        self.lbl_preview_sub.configure(text=f"·  {prev.subtitle}" if prev.subtitle else "")
+
+    def _on_tab_complete(self, _event=None) -> str:
+        cur_txt = self.entry.get()
+        completed = ui_helpers.autocomplete(cur_txt, self.engine.current)
+        if completed != cur_txt:
+            self.entry.delete(0, "end")
+            self.entry.insert(0, completed)
+            self._update_intent_preview()
+        return "break"
+
+    def _on_quick_chip(self, chip: ui_helpers.QuickChip) -> None:
+        if chip.execute_now:
+            self._submit(chip.command)
+        else:
+            self.entry.delete(0, "end")
+            self.entry.insert(0, chip.command)
+            self.entry.focus_set()
+            self._update_intent_preview()
+
+    # ------------------------------------------------------------ chat api
+    def _post(self, kind: str, text: str, prefix: str | None = None, stream: bool = False) -> None:
+        self.chat.config(state="normal")
+        if prefix:
+            badge_tag = "you_badge" if kind == "you" else ("thans_badge" if kind == "thans" else kind)
+            self.chat.insert("end", prefix, badge_tag)
+
+        if stream and self.animations_on and len(text) > 28:
+            chunks = animations.stream_chunks(text, max_steps=10)
+            self.chat.insert("end", chunks[0], kind)
+            self.chat.config(state="disabled")
+            self.chat.see("end")
+
+            def stream_step(idx: int) -> None:
+                if self._closing:
+                    return
+                self.chat.config(state="normal")
+                if idx < len(chunks):
+                    self.chat.insert("end", chunks[idx], kind)
+                    self.chat.config(state="disabled")
+                    self.chat.see("end")
+                    self.root.after(14, lambda: stream_step(idx + 1))
+                else:
+                    self.chat.insert("end", "\n\n", kind)
+                    self.chat.config(state="disabled")
+                    self.chat.see("end")
+
+            self.root.after(14, lambda: stream_step(1))
+            return
+
+        self.chat.insert("end", text + "\n\n", kind)
+        self.chat.config(state="disabled")
+        self.chat.see("end")
+
+    def clear_chat(self) -> None:
+        self.chat.config(state="normal")
+        self.chat.delete("1.0", "end")
+        self.chat.config(state="disabled")
+        self._post("sys", "Conversation cleared.", "· ")
+
+    def _set_status(self, text: str) -> None:
+        self.status.config(text=text)
+
+    def _set_mic(self, on: bool) -> None:
+        self.mic_on = on
+        self.sonic_state = "listening" if on else "idle"
+        if not on:
+            self.sonic_level = 0.0
+        if hasattr(self, "btn_mic"):
+            self.btn_mic.config(bg=self.pal["err"] if on else self.pal["panel2"])
+            self.btn_mic.config(text="⏹" if on else "🎤")
+        self._set_status(
+            "🎙 listening — speak a command, then pause…"
+            if on
+            else f"working folder: {self.engine.current}"
+        )
 
     def _set_busy(self, busy: bool) -> None:
         self.busy = busy
-        self.btn_send.set_enabled(not busy)
         if busy:
-            self.chat_card.pulse_glow(True)
-            self._start_thinking()
-            self.status_bar.start_indeterminate(1.4)
-            self.status_bar.place(in_=self.chat_card, relx=0, rely=1.0, anchor="sw",
-                                  relwidth=1, height=3)
-            self.status_bar.lift()
-        else:
-            self.anim_stop_thinking()
-            self.chat_card.pulse_glow(False)
-            self.status_bar.stop_indeterminate()
-            self.status_bar.place_forget()
+            self.sonic_state = "thinking"
+            self._set_status("⚡ executing…")
 
-    # ------------------------------------------------------- thinking dots
-    def _start_thinking(self) -> None:
-        from .ui.widgets import Dots
-        if self.thinking is None:
-            self.thinking = Dots(self.root, animator=self.anim, bg=T.BG, size=22)
-        try:
-            self.thinking.place(in_=self.chat_card, relx=0.5, rely=0.5, anchor="center")
-        except tk.TclError:
-            pass
-        self.thinking.start()
-
-    def anim_stop_thinking(self) -> None:
-        if self.thinking is not None:
-            self.thinking.stop()
-            try:
-                self.thinking.place_forget()
-            except tk.TclError:
-                pass
-
-    # =====================================================================
-    # voice
-    # =====================================================================
-    def toggle_mic(self) -> None:
-        if self.text_only or self.stt is None:
-            self.toast("Text-only mode — restart without --text-only for voice", "warn")
+    # ------------------------------------------------------------- polling
+    def _poll(self) -> None:
+        if self._closing:
             return
+        try:
+            while True:
+                item = self._q.get_nowait()
+                kind = item[0]
+                if kind == "post":
+                    stream_flag = bool(item[4]) if len(item) > 4 else False
+                    self._post(item[1], item[2], item[3], stream=stream_flag)
+                elif kind == "busy":
+                    self._set_busy(item[1])
+                    if not item[1]:
+                        self._set_status(f"working folder: {self.engine.current}")
+                elif kind == "after_action":
+                    ok_flag, cmd_desc = item[1], item[2]
+                    self.sonic_state = "success" if ok_flag else "error"
+                    self._flash_ticks = 22
+                    self._refresh_workspace(animate_diff=True)
+                    if ok_flag and cmd_desc and not cmd_desc.startswith(("list", "help", "search")):
+                        self.show_toast(f"✓ {cmd_desc}", "ok")
+                elif kind == "chips":
+                    self._refresh_chips()
+                elif kind == "status":
+                    self._set_status(item[1])
+                elif kind == "mic":
+                    self._set_mic(item[1])
+                elif kind == "mic_state":
+                    self._set_status(item[1])
+                elif kind == "mic_partial":
+                    self.lbl_preview_icon.configure(text="🎙", fg=self.pal["err"])
+                    self.lbl_preview_title.configure(text=f"Hearing: \"{item[1]}\"")
+                elif kind == "mic_level":
+                    self.sonic_level = float(item[1])
+                elif kind == "voice":
+                    self._submit(item[1])
+                elif kind == "downloading":
+                    self._downloading = item[1]
+                    self.btn_dl.config(state="disabled" if item[1] else "normal")
+        except queue.Empty:
+            pass
+        self.root.after(60, self._poll)
+
+    def _refresh_chips(self) -> None:
+        p = self.pal
+        s = model_manager.status(self.cfg)
+        root_name = Path(self.engine.root).name or str(self.engine.root)
+        self.chips["root"].config(
+            text=f"📂 {root_name}",
+            bg=p["panel"],
+            fg=p["fg"] if self.engine.root.is_dir() else p["err"],
+        )
+        stt = s["stt"] and s["stt_deps"]
+        self.chips["stt"].config(
+            text="STT ✓" if stt else "STT ✗",
+            bg=p["panel"],
+            fg=p["ok"] if stt else p["dim"],
+        )
+        self.chips["tts"].config(
+            text="TTS ✓" if s["tts"] else "TTS off",
+            bg=p["panel"],
+            fg=p["ok"] if s["tts"] else p["dim"],
+        )
+        if s["llm_enabled"] and s["llm"]:
+            self.chips["llm"].config(text="LLM ✓", bg=p["panel"], fg=p["ok"])
+        elif s["llm"]:
+            self.chips["llm"].config(text="LLM off", bg=p["panel"], fg=p["warn"])
+        else:
+            self.chips["llm"].config(text="Rules ⚡", bg=p["panel"], fg=p["accent"])
+
+        t_count = ui_helpers.count_trash(self.engine.root)
+        self.chips["trash"].config(
+            text=f"♻️ {t_count}",
+            bg=p["panel"],
+            fg=p["warn"] if t_count > 0 else p["dim"],
+        )
+
+    # ------------------------------------------------------------ commands
+    def _on_enter(self) -> None:
+        text = self.entry.get().strip()
+        if not text:
+            return
+        self.entry.delete(0, "end")
+        self.history.append(text)
+        self._hist_i = None
+        self._update_intent_preview()
+        self._submit(text)
+
+    def _on_hist(self, delta: int) -> None:
+        if not self.history:
+            return
+        self._hist_i = (
+            len(self.history) - 1
+            if self._hist_i is None
+            else max(0, min(len(self.history) - 1, self._hist_i + delta))
+        )
+        self.entry.delete(0, "end")
+        self.entry.insert(0, self.history[self._hist_i])
+        self._update_intent_preview()
+
+    def _submit(self, text: str) -> None:
+        stamp = datetime.now().strftime("%H:%M")
+        self._post("you", text, f"[{stamp}] You › ")
+        threading.Thread(target=self._worker, args=(text,), daemon=True).start()
+
+    def _worker(self, text: str) -> None:
+        self._q.put(("busy", True))
+        try:
+            res = self.engine.run(text)
+            if res.command:
+                self._q.put(("post", "cmd", f"⚡ {res.command}", None, False))
+            tag = "thans" if res.ok else "err"
+            prefix = "THANS › " if res.ok else "⚠ "
+            self._q.put(("post", tag, res.message, prefix, res.ok))
+            self._q.put(("after_action", res.ok, res.command))
+            if self.cfg.get("tts"):
+                self.speaker.say(res.message)
+        except Exception:  # noqa: BLE001
+            self._q.put(("post", "err", "Internal error:\n" + traceback.format_exc(limit=4), "⚠ ", False))
+            self._q.put(("after_action", False, ""))
+        finally:
+            self._q.put(("busy", False))
+
+    # ------------------------------------------------------------------ mic
+    def _toggle_mic(self) -> None:
         if self.mic_on:
             self.stt.stop()
-            self._set_mic(False)
+            self._q.put(("mic", False))
             return
         if not self.stt.available():
-            self.toast("Speech model missing — click ↓ once to download it (~40 MB)", "warn")
-            self.open_settings()
+            self._post(
+                "sys",
+                "Speech model missing — click '⬇ Models' to download it once (~40 MB), "
+                "or use text commands.",
+                "⚠ ",
+            )
+            self.show_toast("Speech model not installed — click '⬇ Models'", "warn")
             return
-        ok = self.stt.start(on_final=self._voice_final, on_state=self._mic_state)
+        ok = self.stt.start(
+            on_final=self._voice_final,
+            on_state=self._mic_state_cb,
+            on_partial=lambda part: self._q.put(("mic_partial", part)),
+            on_level=lambda lvl: self._q.put(("mic_level", lvl)),
+        )
         if ok:
-            self._set_mic(True)
-            self.chat.add_system("Listening — speak your command, then pause.", "info")
-        else:
-            self.toast("Microphone unavailable", "error")
+            self._q.put(("mic", True))
 
-    def _mic_state(self, msg: str) -> None:
+    def _mic_state_cb(self, msg: str) -> None:
         self._q.put(("mic_state", msg))
 
     def _voice_final(self, text: str) -> None:
         self._q.put(("mic", False))
         self._q.put(("voice", text))
 
-    def _set_mic(self, on: bool) -> None:
-        self.mic_on = on
-        if self.text_only:
-            return
-        self.btn_mic.configure_glyph(T.SYM["stop"] if on else T.SYM["mic"])
-        self.btn_mic.primary = on
-        self.btn_mic.ring = on
-        self.btn_mic._hover = 0.0
-        self.btn_mic._draw()
-        self.voice_card.set_state("listening — speak now…" if on else "mic idle · F2 to talk", on)
-        if on:
-            self.chip_voice.set(state="listening")
-            self._set_status("listening…")
-        else:
-            self._refresh_chips()
-            self._set_status(self._status_line())
-
-    def _toggle_speak(self, value: bool) -> None:
-        self.cfg["tts"] = bool(value)
-        if self.speaker:
-            self.speaker.enabled = bool(value)
-        config.save_config(self.cfg)
-        self._refresh_chips()
-        self.toast("Spoken replies " + ("on" if value else "off"))
-
-    # =====================================================================
-    # settings & models
-    # =====================================================================
-    def open_help(self) -> None:
-        """Command reference as a tappable sheet (F1 / the Help button)."""
-        if self.help_panel.is_open:
-            self.help_panel.close()
-            return
-        if self.settings.is_open:
-            self.settings.close()
-        self.help_panel.open()
-
-    def _fill_and_focus(self, command: str) -> None:
-        """Put a suggested command in the composer, ready to run."""
-        self._set_input(command)
-        self.input.focus_set()
-        if self.engine is not None:
-            self._set_status("press ⏎ to run · Esc clears")
-
-    def open_settings(self) -> None:
-        if self.settings.is_open:
-            self.settings.close()
-            return
-        if self.help_panel.is_open:
-            self.help_panel.close()
-        self.settings.cfg = dict(self.cfg)
-        self.settings.open()
-
-    def _setting_changed(self, key: str, value) -> None:
-        self.cfg[key] = value
-        config.save_config(self.cfg)
-        if key == "motion":
-            self.anim = logic.Animator(fps=60) if value else None
-            for w in (self.chat, self.chat.bar, self.folder_card, self.quick_card,
-                      self.voice_card, *self.quick_card.buttons.values(),
-                      self.btn_send, self.btn_mic, self.btn_undo, self.btn_models,
-                      self.btn_settings, self.chip_root, self.chip_voice, self.chip_llm,
-                      self.folder_card.bar, self.composer):
-                if hasattr(w, "anim"):
-                    w.anim = self.anim
-            self.toast("Animations " + ("on" if value else "off (instant UI)"))
-        elif key == "tts":
-            if self.speaker:
-                self.speaker.enabled = bool(value)
-            self._refresh_chips()
-        elif key == "tts_rate":
-            if self.speaker:
-                self.speaker.set_rate(int(value))
-        elif key == "use_llm":
-            if self.engine:
-                self.engine.cfg["use_llm"] = bool(value)
-                if value and self.engine.llm is None:
-                    try:
-                        from .parser_llm import LLMParser
-                        lp = LLMParser(self.cfg)
-                        self.engine.llm = lp if lp.available() else None
-                    except Exception:
-                        self.engine.llm = None
-                if not value:
-                    self.engine.llm = None
-            self._refresh_chips()
-            if value and self.engine and self.engine.llm is None:
-                self.toast("No GGUF model / llama-cpp-python found — using the rule parser",
-                           "warn")
-            else:
-                self.toast("Free-form parsing " + ("on" if value else "off"))
-        elif key == "llm_model":
-            self.toast("Model set to " + logic.truncate(str(value), 28))
-        elif key == "permanent_delete":
-            self.toast("Permanent delete " + ("ON — deletions cannot be undone" if value else "off"),
-                       "error" if value else "info")
-        elif key == "root":
-            self._apply_root(str(value))
-
-    def _apply_root(self, path: str) -> None:
-        if not path:
-            return
-        self.cfg["root"] = path
-        config.save_config(self.cfg)
-        if self.engine:
-            self.engine.set_root(path)
-        self._refresh_chips()
-        self.folder_card.set_root(Path(path))
-        self.settings.set_root_label(path)
-        self.chat.add_system(f"All file operations are now confined to: {path}", "info", card=True)
-        self._set_status(self._status_line())
-        self.toast("Working folder changed", "ok")
-
+    # --------------------------------------------------------------- dialogs
     def _pick_root(self) -> None:
-        d = filedialog.askdirectory(initialdir=str(self.engine.root) if self.engine else "~",
-                                    title="Choose the folder THANS may manage")
-        if d:
-            self._apply_root(d)
-
-    def _open_root(self) -> None:
-        """Reveal the working folder in the OS file manager."""
-        if not self.engine:
+        d = filedialog.askdirectory(
+            initialdir=str(self.engine.root),
+            title="Choose the working folder THANS may manage",
+        )
+        if not d:
             return
-        try:
-            if sys.platform == "win32":
-                subprocess.Popen(["explorer", str(self.engine.root)])
-            elif sys.platform == "darwin":
-                subprocess.Popen(["open", str(self.engine.root)])
-            else:
-                subprocess.Popen(["xdg-open", str(self.engine.root)])
-        except Exception:
-            self.toast("Could not open a file manager", "warn")
+        self.cfg["root"] = d
+        config.save_config(self.cfg)
+        self.engine.set_root(d)
+        self._refresh_workspace(animate_diff=False)
+        self._set_status(f"working folder: {d}")
+        self._post("sys", f"All file operations are now confined to: {d}", "📂 ")
+        self.show_toast(f"📂 Working root set to {Path(d).name or d}", "info")
 
     def _download_models(self) -> None:
-        """Fetch the offline models in the background, streaming real progress."""
         if self._downloading:
-            self.toast("A download is already running")
             return
-        if not messagebox.askyesno(APP_NAME,
-                                   "Download the offline models now?\n\n"
-                                   "• speech recognition (Vosk)  ≈ 40 MB\n"
-                                   "• optional LLM (Qwen2.5 0.5B) ≈ 408 MB\n\n"
-                                   "THANS is 100% offline afterwards."):
-            return
+        if messagebox.askyesno(
+            APP_NAME,
+            "Download offline models?\n\n"
+            "• STT model (Vosk) ≈ 40 MB\n"
+            "• LLM model (Qwen2.5-0.5B) ≈ 408 MB\n\n"
+            "One-time; THANS then runs with no internet at all.",
+        ):
+            self._start_download()
+
+    def _start_download(self) -> None:
         self._downloading = True
-        self.settings.set_download("starting…", 0.0)
-        self.toast("Downloading models — progress in Settings")
-        if not self.settings.is_open:
-            self.open_settings()
-        threading.Thread(target=self._download_worker, daemon=True).start()
+        self.btn_dl.config(state="disabled")
+        self._post("sys", "Downloading offline models (one-time; needs internet)…", "⬇ ")
 
-    def _download_worker(self) -> None:
-        """Run scripts/download_models.py and parse its progress percentages."""
-        script = config.app_root() / "scripts" / "download_models.py"
-        frozen = bool(getattr(sys, "frozen", False))
-        rc = 1
-        try:
-            if frozen or not script.exists():
-                # bundled build: run it in-process (it is stdlib-only)
-                import importlib.util
-                spec = importlib.util.spec_from_file_location("thans_dl", script)
-                mod = importlib.util.module_from_spec(spec)
-                spec.loader.exec_module(mod)
-                rc = int(mod.main([]) or 0)
-            else:
-                proc = subprocess.Popen([sys.executable, str(script)],
-                                        cwd=str(script.parent.parent), text=True,
-                                        stdout=subprocess.PIPE,
-                                        stderr=subprocess.STDOUT, bufsize=1)
+        def job() -> None:
+            script = config.app_root() / "scripts" / "download_models.py"
+            py = shutil.which("python3") or shutil.which("python") or sys.executable
+            try:
+                proc = subprocess.Popen(
+                    [py, str(script), "--dir", str(config.models_dir())],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    cwd=str(config.app_root()),
+                )
                 assert proc.stdout is not None
-                last = 0.0
-                for raw in proc.stdout:
-                    for piece in raw.replace("\r", "\n").split("\n"):
-                        pct = self._percent(piece)
-                        if pct is not None:
-                            overall = min(0.999, last + pct / 100.0 * 0.5)
-                            if pct >= 99.0:
-                                last = min(1.0, last + 0.5)
-                                overall = last
-                            self._q.put(("models_progress", overall,
-                                         piece.strip()[:60]))
-                rc = proc.wait()
-        except SystemExit as e:
-            rc = int(getattr(e, "code", 0) or 0)
-        except Exception as e:                                  # noqa: BLE001
-            self._q.put(("models_error", str(e)))
-            return
-        self._q.put(("models_done", rc))
+                for line in proc.stdout:
+                    line = line.rstrip()
+                    if line:
+                        self._q.put(("post", "sys", line, None, False))
+                code = proc.wait()
+            except Exception as e:  # noqa: BLE001
+                code = -1
+                self._q.put(("post", "err", f"Could not start downloader: {e}", None, False))
+            self._q.put(
+                (
+                    "post",
+                    "sys" if code == 0 else "err",
+                    "Download finished — voice input ready."
+                    if code == 0
+                    else f"Download failed (code {code}). Check the network and retry.",
+                    None,
+                    False,
+                )
+            )
+            self._q.put(("downloading", False))
+            self._q.put(("chips",))
 
-    @staticmethod
-    def _percent(line: str) -> float | None:
-        import re
-        m = re.search(r"(\d{1,3}(?:\.\d+)?)\s*%", line or "")
-        if not m:
-            return None
-        try:
-            return float(m.group(1))
-        except ValueError:
-            return None
+        threading.Thread(target=job, daemon=True).start()
 
-    def _models_finished(self, rc: int) -> None:
-        self._downloading = False
-        self.model_status = model_manager.status(self.cfg)
-        self._refresh_chips()
-        if rc == 0:
-            self.settings.set_download("done — models ready", 1.0)
-            self.toast("Models ready — voice input is live", "ok")
-            if not self.text_only:
-                self.stt = VoiceSTT()
-            self.chat.add_system("Speech recognition is ready — press the mic (F2) "
-                                 "and talk to THANS.", "ok")
-        else:
-            self.settings.set_download("finished with errors — see the terminal", 0.0)
-            self.toast("Model download had errors", "warn")
+    def _settings(self) -> None:
+        p = self.pal
+        dlg = tk.Toplevel(self.root)
+        dlg.title("THANS Settings")
+        dlg.configure(bg=p["panel"])
+        dlg.resizable(False, False)
+        pad = dict(padx=16, pady=6)
 
-    # =====================================================================
-    # chrome updates
-    # =====================================================================
-    def _refresh_chips(self) -> None:
-        if not self._boot_done:
-            return
-        s = self.model_status or model_manager.status(self.cfg)
-        root = self.engine.root if self.engine else Path(self.cfg["root"])
-        self.chip_root.set(text=logic.truncate(root.name or str(root), 16), state="ready")
-        stt_ok = bool(s.get("stt") and s.get("stt_deps"))
-        self.chip_voice.set(text="voice ready" if stt_ok else "voice: no model",
-                            state="ok" if stt_ok else "missing")
-        llm_ready = bool(s.get("llm") and s.get("llm_enabled"))
-        if llm_ready:
-            self.chip_llm.set(text="llm on", state="ok")
-        elif s.get("llm"):
-            self.chip_llm.set(text="llm off", state="warn")
-        else:
-            self.chip_llm.set(text="llm none", state="off")
-        self.voice_card.sw_speak.set(bool(self.cfg.get("tts")))
+        tk.Label(
+            dlg,
+            text="Working folder (THANS is strictly confined to this folder)",
+            bg=p["panel"],
+            fg=p["dim"],
+            font=FONT_UI_BOLD,
+        ).pack(anchor="w", **pad)
+        f1 = tk.Frame(dlg, bg=p["panel"])
+        f1.pack(fill="x", **pad)
+        var_root = tk.StringVar(value=str(self.engine.root))
+        tk.Entry(
+            f1,
+            textvariable=var_root,
+            font=FONT_MONO,
+            bg=p["panel2"],
+            fg=p["fg"],
+            insertbackground=p["fg"],
+            relief="flat",
+        ).pack(side="left", fill="x", expand=True, ipady=4)
 
-    def _status_line(self) -> str:
-        if not self.engine:
-            return "starting…"
-        cur = self.engine.current
-        try:
-            rel = cur.relative_to(self.engine.root).as_posix() or "."
-        except ValueError:
-            rel = str(cur)
-        return f"in {rel}  ·  root {logic.truncate(str(self.engine.root), 46)}"
+        def browse() -> None:
+            d = filedialog.askdirectory(initialdir=var_root.get())
+            if d:
+                var_root.set(d)
 
-    def _set_status(self, text: str) -> None:
-        self.status_lbl.configure(text=text)
+        ttk.Button(f1, text="Browse", command=browse).pack(side="left", padx=(6, 0))
 
-    def _first_run_tour(self) -> None:
-        """One-time, dismissible walkthrough of the four corners of the app."""
-        self.toast("Tip: press F1 for the command sheet, F2 to talk", "info", 4200)
-        self.toast("F5 rescans the folder · Ctrl+, opens settings", "info", 4200)
-        self.chat.add_system(
-            "New here? Start with one of the suggestions above the input box, "
-            "or press F1 to browse all "
-            f"{len(COMMAND_REFERENCE)} command families.", "info", card=True)
-        self.cfg["onboarded"] = True
-        config.save_config(self.cfg)
+        var_tts = tk.BooleanVar(value=bool(self.cfg.get("tts")))
+        tk.Checkbutton(
+            dlg,
+            text="Speak replies aloud (offline TTS)",
+            variable=var_tts,
+            bg=p["panel"],
+            fg=p["fg"],
+            activebackground=p["panel"],
+            activeforeground=p["fg"],
+            selectcolor=p["panel2"],
+        ).pack(anchor="w", **pad)
 
-    def _welcome(self) -> None:
-        s = self.model_status
-        self.chat.add_reply(
-            f"{logic.greeting()}! I manage files & folders inside your working folder — "
-            f"by the sound of your voice or by typing. Say 'help' any time (F1), "
-            f"or press the mic (F2) and just talk.",
-            ok=True, source="welcome", stream=True)
-        if not (s.get("stt") and s.get("stt_deps")) and not self.text_only:
-            self.chat.add_system("Voice input needs the one-time speech model (~40 MB, still "
-                                 "fully offline afterwards) — press the ↓ button to fetch it. "
-                                 "Everything works by typing in the meantime.", "warn")
-        if not self.cfg.get("onboarded"):
-            self._first_run_tour()
-        self._set_status(self._status_line())
+        f2 = tk.Frame(dlg, bg=p["panel"])
+        f2.pack(fill="x", **pad)
+        tk.Label(f2, text="Speech rate:", bg=p["panel"], fg=p["dim"]).pack(side="left")
+        var_rate = tk.IntVar(value=int(self.cfg.get("tts_rate", 185)))
+        ttk.Scale(
+            f2, from_=110, to=280, variable=var_rate, orient="horizontal", length=220
+        ).pack(side="left", padx=(8, 0))
 
-    def toast(self, text: str, kind: str = "info", ms: int = 2600) -> None:
-        if self.toaster:
-            self.toaster.show(text, kind, ms)
+        var_anim = tk.BooleanVar(value=bool(self.animations_on))
+        tk.Checkbutton(
+            dlg,
+            text="Enable 60fps sonic wave & smooth UI animations",
+            variable=var_anim,
+            bg=p["panel"],
+            fg=p["fg"],
+            activebackground=p["panel"],
+            activeforeground=p["fg"],
+            selectcolor=p["panel2"],
+        ).pack(anchor="w", **pad)
 
-    def clear_chat(self) -> None:
-        self.chat.clear()
-        self.chat.add_system("Chat cleared — the transcript lives only on this screen.", "info")
-        self.toast("Chat cleared")
+        var_llm = tk.BooleanVar(value=bool(self.cfg.get("use_llm")))
+        tk.Checkbutton(
+            dlg,
+            text="Use offline LLM for free-form commands (optional)",
+            variable=var_llm,
+            bg=p["panel"],
+            fg=p["fg"],
+            activebackground=p["panel"],
+            activeforeground=p["fg"],
+            selectcolor=p["panel2"],
+        ).pack(anchor="w", **pad)
 
-    def hide_hero(self) -> None:
-        if getattr(self, "_hero_alive", True):
-            self._hero_alive = False
-            try:
-                self.hero.dismiss()
-            except tk.TclError:
-                pass
+        tk.Label(
+            dlg, text="LLM model (models/*.gguf):", bg=p["panel"], fg=p["dim"], font=FONT_SUB
+        ).pack(anchor="w", **pad)
+        ggufs = [m.name for m in model_manager.all_gguf()]
+        cur = self.cfg.get("llm_model", "")
+        if cur and cur not in ggufs:
+            ggufs = [cur] + ggufs
+        var_llm_model = tk.StringVar(value=cur)
+        ttk.Combobox(
+            dlg, textvariable=var_llm_model, values=ggufs or [cur], state="readonly"
+        ).pack(fill="x", **pad)
 
-    def _apply_responsive(self) -> None:
-        """Hide the dashboard column when the window gets narrow."""
-        if not hasattr(self, "side"):
-            return
-        w = self.root.winfo_width()
-        if w <= 1:                                  # not mapped yet — use the plan
-            try:
-                w = int(self.root.geometry().split("x")[0].split("+")[0])
-            except Exception:
-                w = 1060
-        wide = w >= 900
-        if wide and not self._side_visible:
-            self.side.grid(row=0, column=1, sticky="nsew", padx=(T.PAD, 0))
-            self._side_visible = True
-        elif not wide and self._side_visible:
-            self.side.grid_forget()
-            self._side_visible = False
+        var_perm = tk.BooleanVar(value=bool(self.cfg.get("permanent_delete")))
+        tk.Checkbutton(
+            dlg,
+            text="Danger: deletes bypass the trash (permanent)",
+            variable=var_perm,
+            bg=p["panel"],
+            fg=p["warn"],
+            activebackground=p["panel"],
+            activeforeground=p["warn"],
+            selectcolor=p["panel2"],
+        ).pack(anchor="w", **pad)
 
-    # =====================================================================
-    # main loop
-    # =====================================================================
-    def _tick(self) -> None:
-        """One frame of the app: animations, worker queue, dashboard."""
-        now = time.time()
-        dt = min(0.1, max(0.001, now - self._last_dt))
-        self._last_dt = now
-        self._tick_once(dt)
-        self.root.after(T.TICK_MS, self._tick)
+        def save() -> None:
+            cfg = self.cfg
+            cfg["root"] = var_root.get().strip() or cfg["root"]
+            cfg["tts"] = bool(var_tts.get())
+            cfg["tts_rate"] = int(var_rate.get())
+            cfg["animations"] = bool(var_anim.get())
+            cfg["use_llm"] = bool(var_llm.get())
+            cfg["llm_model"] = var_llm_model.get().strip() or cfg.get("llm_model", "")
+            cfg["permanent_delete"] = bool(var_perm.get())
+            config.save_config(cfg)
+            self.cfg = cfg
+            self.animations_on = cfg["animations"]
+            self.engine = Engine(cfg["root"], cfg)
+            self.speaker.enabled = cfg["tts"]
+            self.speaker.set_rate(int(cfg["tts_rate"]))
+            self._refresh_workspace(animate_diff=False)
+            self._set_status(f"working folder: {self.engine.current}")
+            self._post("sys", "Settings saved.", "⚙ ")
+            self.show_toast("⚙ Settings saved", "ok")
+            dlg.destroy()
 
-    def _tick_once(self, dt: float) -> None:
-        """The frame body, separated so it can be driven by tests."""
-        if self.anim is not None:
-            self.anim.tick(dt)
-        self._drain_queue()
-        try:
-            self.folder_card.poll()
-            self.folder_card.tick(dt)
-        except Exception:
-            pass
+        ttk.Button(dlg, text="Save Settings", style="Accent.TButton", command=save).pack(
+            pady=(10, 14)
+        )
+        dlg.grab_set()
+        dlg.transient(self.root)
 
-    def _drain_queue(self) -> None:
-        try:
-            while True:
-                item = self._q.get_nowait()
-                kind = item[0]
-                if kind == "reply":
-                    self._on_reply(item[1], item[2])
-                elif kind == "crash":
-                    self._set_busy(False)
-                    self.chat.add_reply("Something went wrong inside THANS:\n\n" + item[1],
-                                        ok=False, source="internal error", card=True)
-                    self.toast("Internal error — see the transcript", "error")
-                elif kind == "mic":
-                    self._set_mic(item[1])
-                elif kind == "mic_state":
-                    self.voice_card.set_state(item[1], self.mic_on)
-                elif kind == "voice":
-                    self.submit(item[1])
-                elif kind == "models_progress":
-                    self.settings.set_download(f"{item[2]}", float(item[1]))
-                elif kind == "models_done":
-                    self._models_finished(item[1])
-                elif kind == "models_error":
-                    self._downloading = False
-                    self.settings.set_download(f"error: {item[1]}", 0.0)
-                    self.toast("Model download failed", "error")
-        except queue.Empty:
-            pass
-
-    # =====================================================================
-    # lifecycle
-    # =====================================================================
+    # ---------------------------------------------------------------- misc
     def _on_close(self) -> None:
+        self._closing = True
         try:
-            self.cfg["window"] = self.root.geometry()
-            config.save_config(self.cfg)
+            self.stt.stop()
         except Exception:
             pass
-        for closer in (lambda: self.stt.stop() if self.stt else None,
-                       lambda: self.speaker.stop() if self.speaker else None):
-            try:
-                closer()
-            except Exception:
-                pass
         try:
-            self.root.destroy()
-        except tk.TclError:
+            self.speaker.stop()
+        except Exception:
             pass
+        self.root.destroy()
 
     def run(self) -> None:
-        self.root.protocol("WM_DELETE_WINDOW", self._on_close)
         self.root.mainloop()
-
-
-def main(argv: list[str] | None = None) -> int:
-    """Convenience entry point mirroring ``python -m thans``."""
-    from .__main__ import main as cli_main
-    return cli_main(argv)

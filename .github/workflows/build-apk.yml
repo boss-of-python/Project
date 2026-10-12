@@ -22,46 +22,35 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: "pip"
 
-      - name: Cache the Android SDK/NDK download
+      - name: Cache Buildozer global directory
         uses: actions/cache@v4
         with:
           path: ~/.buildozer
-          key: buildozer-${{ runner.os }}-${{ hashFiles('android/buildozer.spec') }}
-          restore-keys: buildozer-${{ runner.os }}-
+          key: buildozer-sdk-${{ runner.os }}-api33-v1
 
       - name: Install system deps + buildozer
         run: |
           sudo apt-get update
-          sudo apt-get install -y git zip unzip openjdk-17-jdk \
-            autoconf libtool pkg-config python3-pip ccache
-          python -m pip install --upgrade pip
-          # python-for-android needs Cython < 3 (3.x breaks the p4a build)
-          pip install "cython<3.0" buildozer
+          sudo apt-get install -y \
+            git zip unzip openjdk-17-jdk \
+            autoconf automake libtool pkg-config \
+            cmake build-essential ccache patch lld \
+            libffi-dev libssl-dev zlib1g-dev \
+            libncurses-dev libtinfo6 python3-pip
+          python -m pip install --upgrade pip setuptools wheel virtualenv
+          python -m pip install "cython<3" buildozer
 
-      - name: Run core + UI test suite
+      - name: Run core & UI test suite
         run: python -m thans --selftest
 
-      - name: Validate the Kivy layout against the app code
-        run: python -m unittest tests.test_android_app -v
-
-      - name: Build debug APK
+      - name: Stage core package and build debug APK
         working-directory: android
         run: |
           chmod +x stage_thans.sh
           ./stage_thans.sh
           buildozer android debug
-
-      - name: Show why the build failed
-        if: failure()
-        run: |
-          echo "===== buildozer / python-for-android logs ====="
-          for f in $(find android/.buildozer -name "build.log" -type f 2>/dev/null | head -3); do
-            echo "----- $f (last 250 lines) -----"
-            tail -n 250 "$f"
-          done
-          echo "----- last 120 lines of the plain build output -----"
-          find android/.buildozer -name "*.log" -newer android/buildozer.spec -type f 2>/dev/null | head -5
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4

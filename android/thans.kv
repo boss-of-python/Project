@@ -1,338 +1,296 @@
 #:kivy 2.0
-#:import Window kivy.core.window.Window
-# THANS (Android) — dark, minimal, one accent.  Mirrors the desktop design:
-# header chips · transcript · suggestion pills · composer · hero · boot splash.
-#
-# Every animated property is driven from Python (thans_android/app.py) so the
-# motion language stays in one place and can be switched off in one switch.
+#:import dp kivy.metrics.dp
+#:import sp kivy.metrics.sp
 
-<RoundedButton>:
-    bold: False
-    halign: "center"
-    valign: "middle"
-    markup: False
-    text_size: self.size
-
-<CircleButton>:
-
-<MicButton>:
-
-<Chip>:
-    font_size: sp(11)
-    halign: "center"
-    valign: "middle"
-    text_size: self.size
-    padding: dp(16), 0
-    size_hint: None, None
-    height: dp(28)
-    width: self.texture_size[0] + dp(30)
-    canvas.after:
-        Color:
-            rgba: 0, 0, 0, 0
-
-<Toast>:
+<RoundedButton@Button>:
+    background_normal: ""
+    background_down: ""
+    background_color: (0, 0, 0, 0)
+    color: app.fg_color
     font_size: sp(12)
-    halign: "center"
-    valign: "middle"
-    text_size: self.size
-    size_hint: None, None
-    height: dp(38)
-    width: min(Window.width - dp(24), self.texture_size[0] + dp(44))
+    bold: True
+    btn_bg: app.panel2_color
+    canvas.before:
+        Color:
+            rgba: self.btn_bg if self.state == "normal" else app.accent_color
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [dp(10),]
 
-<Bubble>:
+<ChipButton@Button>:
+    background_normal: ""
+    background_down: ""
+    background_color: (0, 0, 0, 0)
+    color: app.fg_color
+    font_size: sp(11)
+    size_hint_x: None
+    width: max(dp(72), self.texture_size[0] + dp(20))
+    canvas.before:
+        Color:
+            rgba: app.panel2_color if self.state == "normal" else app.accent_color
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [dp(14),]
 
-<TypingDots>:
-    size_hint: None, None
-    size: dp(34), dp(14)
+Screen:
+    name: "thans"
 
-ThansRoot:
-    # ---------------------------------------------------------------- splash
-    Widget:
-        id: boot
+    BoxLayout:
+        id: main_root
+        orientation: "vertical"
+        padding: dp(10)
+        spacing: dp(6)
         canvas.before:
             Color:
-                rgba: app.tok["BG"]
+                rgba: app.bg_color
             Rectangle:
                 pos: self.pos
                 size: self.size
-        BoxLayout:
-            orientation: "vertical"
-            padding: dp(28)
-            spacing: dp(10)
-            Widget:
-            BoxLayout:
-                id: boot_mark_row
-                size_hint_y: None
-                height: dp(52)
-                Widget:
-                Label:
-                    id: boot_mark
-                    text: app.sym["sparkle"]
-                    font_size: sp(30)
-                    color: app.tok["ACCENT"]
-                    size_hint: None, None
-                    size: dp(52), dp(52)
-                Widget:
-            Label:
-                id: boot_word
-                text: "THANS"
-                bold: True
-                font_size: sp(14)
-                color: app.tok["FG"]
-                size_hint_y: None
-                height: dp(38)
-            Label:
-                id: boot_sub
-                text: "offline voice & text file assistant"
-                font_size: sp(11)
-                color: app.tok["FG_DIM"]
-                opacity: 0
-                size_hint_y: None
-                height: dp(20)
-            Widget:
-                size_hint_y: None
-                height: dp(14)
-            SweepBar:
-                id: boot_bar
-                size_hint: None, None
-                size: dp(200), dp(5)
-                pos_hint: {"center_x": 0.5}
-            Label:
-                id: boot_status
-                text: "starting engine"
-                font_size: sp(11)
-                color: app.tok["FG_FAINT"]
-                opacity: 0
-                size_hint_y: None
-                height: dp(22)
-            Widget:
 
-    # ------------------------------------------------------------- main view
-    BoxLayout:
-        id: main
-        orientation: "vertical"
-        padding: dp(10), dp(8), dp(10), dp(10)
-        spacing: dp(8)
-        opacity: 0
-
-        # header — mark, title, status chips
+        # ===================== 1. HEADER BAR =====================
         BoxLayout:
             size_hint_y: None
-            height: dp(40)
+            height: dp(44)
             spacing: dp(6)
-            Label:
-                text: app.sym["sparkle"]
-                font_size: sp(16)
-                color: app.tok["ACCENT"]
-                size_hint: None, None
-                size: dp(24), dp(40)
-            Label:
-                text: "THANS"
-                bold: True
-                font_size: sp(17)
-                color: app.tok["FG"]
-                halign: "left"
-                valign: "middle"
-                size_hint_x: 0.34
-                text_size: self.size
-            Chip:
-                id: chip_voice
-                text: "voice"
-                dot_color: app.tok["FG_FAINT"]
-                on_release: app.toggle_speak()
-            Chip:
-                id: chip_llm
-                text: "rule parser"
-                dot_color: app.tok["OK"]
-                on_release: app.show_capabilities()
+            padding: [dp(10), dp(4)]
+            canvas.before:
+                Color:
+                    rgba: app.panel_color
+                RoundedRectangle:
+                    pos: self.pos
+                    size: self.size
+                    radius: [dp(12),]
 
-        # status line with thinking dots + busy sweep
+            BoxLayout:
+                orientation: "vertical"
+                size_hint_x: 0.48
+                Label:
+                    text: "THANS"
+                    font_size: sp(16)
+                    bold: True
+                    color: app.fg_color
+                    halign: "left"
+                    valign: "bottom"
+                    text_size: self.size
+                Label:
+                    id: status
+                    text: "● offline ready"
+                    font_size: sp(11)
+                    color: app.dim_color
+                    halign: "left"
+                    valign: "top"
+                    shorten: True
+                    text_size: self.size
+
+            RoundedButton:
+                id: btn_speak
+                text: "SPEAK: OFF"
+                size_hint_x: 0.24
+                font_size: sp(10)
+                on_release: app.toggle_speak()
+
+            RoundedButton:
+                id: btn_theme
+                text: "☀️"
+                size_hint_x: 0.12
+                font_size: sp(13)
+                on_release: app.toggle_theme()
+
+            RoundedButton:
+                id: btn_undo_top
+                text: "↩"
+                size_hint_x: 0.12
+                font_size: sp(14)
+                on_release: app.run_quick_command("undo")
+
+        # ===================== 2. SONIC WAVE & BREADCRUMB BAR =====================
         BoxLayout:
             size_hint_y: None
-            height: dp(22)
-            spacing: dp(8)
-            Label:
-                id: status
-                text: "ready"
+            height: dp(36)
+            spacing: dp(6)
+            padding: [dp(8), dp(4)]
+            canvas.before:
+                Color:
+                    rgba: app.panel_color
+                RoundedRectangle:
+                    pos: self.pos
+                    size: self.size
+                    radius: [dp(10),]
+
+            RoundedButton:
+                id: btn_up
+                text: "⬆ Up"
+                size_hint_x: None
+                width: dp(54)
                 font_size: sp(11)
-                color: app.tok["FG_DIM"]
+                on_release: app.navigate_up()
+
+            Label:
+                id: crumb_label
+                text: "🏠 root"
+                font_size: sp(11)
+                bold: True
+                color: app.accent_color
                 halign: "left"
                 valign: "middle"
-                text_size: self.size
                 shorten: True
-            TypingDots:
-                id: dots
+                text_size: self.size
+
+            Label:
+                id: sonic_indicator
+                text: "ılılılı"
+                font_size: sp(12)
+                bold: True
                 size_hint_x: None
-                width: dp(34)
+                width: dp(62)
+                color: app.sonic_color
+                halign: "center"
+                valign: "middle"
 
-        SweepBar:
-            id: busy_bar
-            size_hint_y: None
-            height: dp(3)
-            opacity: 0
+            RoundedButton:
+                id: btn_tab_chat
+                text: "💬 Chat"
+                size_hint_x: None
+                width: dp(68)
+                font_size: sp(11)
+                btn_bg: app.accent_color if app.active_tab == "chat" else app.panel2_color
+                on_release: app.switch_tab("chat")
 
-        # transcript (newest on top)
+            RoundedButton:
+                id: btn_tab_files
+                text: "📁 Files"
+                size_hint_x: None
+                width: dp(74)
+                font_size: sp(11)
+                btn_bg: app.accent_color if app.active_tab == "files" else app.panel2_color
+                on_release: app.switch_tab("files")
+
+        # ===================== 3. MAIN CONTENT AREA (CHAT / FILES) =====================
         ScrollView:
             id: chat_scroll
+            size_hint_y: 1
             do_scroll_x: False
-            bar_width: dp(2)
-            bar_color: app.tok["ACCENT_HI"]
+            bar_width: dp(3)
+            canvas.before:
+                Color:
+                    rgba: app.panel_color
+                RoundedRectangle:
+                    pos: self.pos
+                    size: self.size
+                    radius: [dp(14),]
             BoxLayout:
                 id: chat_box
                 orientation: "vertical"
                 size_hint_y: None
                 height: self.minimum_height
+                padding: dp(10)
                 spacing: dp(8)
-                padding: dp(2), dp(2), dp(2), dp(2)
 
-        # suggestion pills (appear while typing)
-        ScrollView:
-            id: suggest_scroll
+        # ===================== 4. LIVE INTENT PREVIEW PILL =====================
+        BoxLayout:
             size_hint_y: None
-            height: 0
-            opacity: 0
-            do_scroll_x: True
+            height: dp(30)
+            padding: [dp(10), dp(2)]
+            canvas.before:
+                Color:
+                    rgba: app.panel_color
+                RoundedRectangle:
+                    pos: self.pos
+                    size: self.size
+                    radius: [dp(8),]
+            Label:
+                id: preview_label
+                text: "✨ Ready for voice or text command · Tap a chip or type below"
+                font_size: sp(11)
+                color: app.dim_color
+                halign: "left"
+                valign: "middle"
+                shorten: True
+                text_size: self.size
+
+        # ===================== 5. QUICK-ACTION CHIPS STRIP =====================
+        ScrollView:
+            id: chips_scroll
+            size_hint_y: None
+            height: dp(34)
             do_scroll_y: False
             bar_width: 0
             BoxLayout:
-                id: suggest_box
+                id: chips_box
                 orientation: "horizontal"
                 size_hint_x: None
                 width: self.minimum_width
                 spacing: dp(6)
+                padding: [dp(2), dp(2)]
 
-        # quick actions
+                ChipButton:
+                    text: "📁 List"
+                    on_release: app.run_quick_command("list")
+                ChipButton:
+                    text: "➕ Folder"
+                    on_release: app.prefill_input("create folder ")
+                ChipButton:
+                    text: "📝 File"
+                    on_release: app.prefill_input("create file ")
+                ChipButton:
+                    text: "✨ Organize"
+                    on_release: app.run_quick_command("organize")
+                ChipButton:
+                    text: "🔍 Find"
+                    on_release: app.prefill_input("find ")
+                ChipButton:
+                    text: "⚡ Complete"
+                    on_release: app.complete_input()
+                ChipButton:
+                    text: "↩ Undo"
+                    on_release: app.run_quick_command("undo")
+                ChipButton:
+                    text: "❓ Help"
+                    on_release: app.say_help()
+
+        # ===================== 6. INPUT ROW =====================
         BoxLayout:
             size_hint_y: None
-            height: dp(34)
+            height: dp(46)
             spacing: dp(6)
+            TextInput:
+                id: input
+                multiline: False
+                font_size: sp(14)
+                foreground_color: app.fg_color
+                background_color: app.panel2_color
+                cursor_color: app.accent_color
+                padding: [dp(12), dp(12)]
+                hint_text: "Command, e.g. 'create folder work'"
+                hint_text_color: app.dim_color
+                on_text: app.on_input_change(self.text)
+                on_text_validate: app.send_input()
             RoundedButton:
-                text: app.sym["wand"] + "  Organize"
-                subtle: True
-                font_size: sp(12)
-                on_release: app.run_quick("organize .")
-            RoundedButton:
-                text: app.sym["undo"] + "  Undo"
-                subtle: True
-                font_size: sp(12)
-                on_release: app.run_quick("undo")
-            RoundedButton:
-                text: app.sym["list"] + "  Count"
-                subtle: True
-                font_size: sp(12)
-                on_release: app.run_quick("how many files in .")
-            RoundedButton:
-                text: app.sym["keyboard"] + "  Help"
-                subtle: True
-                font_size: sp(12)
-                on_release: app.run_quick("help")
-
-        # composer
-        BoxLayout:
-            size_hint_y: None
-            height: dp(50)
-            spacing: dp(8)
-            Card:
-                id: input_card
-                radius: dp(14)
-                padding: dp(10), 0
-                TextInput:
-                    id: input
-                    multiline: False
-                    font_size: sp(15)
-                    background_color: 0, 0, 0, 0
-                    foreground_color: app.tok["FG"]
-                    cursor_color: app.tok["ACCENT_HI"]
-                    hint_text: "type a command…  e.g. create folder work"
-                    hint_foreground_color: app.tok["FG_FAINT"]
-                    on_text: app.on_input_text(self.text)
-                    on_text_validate: app.send_input()
-            MicButton:
-                id: btn_mic
-                size_hint: None, None
-                size: dp(50), dp(50)
-                opacity: 0.3 if app.mic_unavailable else 1.0
-                on_release: app.toggle_mic()
-            CircleButton:
                 id: btn_send
-                text: app.sym["send"]
-                primary: True
-                size_hint: None, None
-                size: dp(50), dp(50)
-                font_size: sp(18)
+                text: "SEND"
+                size_hint_x: None
+                width: dp(72)
+                font_size: sp(12)
+                btn_bg: app.accent_color
                 on_release: app.send_input()
 
-    # ------------------------------------------------------------------- hero
-    Card:
-        id: hero
-        orientation: "vertical"
-        padding: dp(20), dp(18)
-        spacing: dp(8)
-        opacity: 0
-        size_hint: None, None
-        size: min(Window.width - dp(48), dp(340)), dp(300)
-        pos_hint: {"center_x": 0.5, "center_y": 0.56}
-        Label:
-            text: app.sym["sparkle"]
-            font_size: sp(28)
-            color: app.tok["ACCENT"]
+        # ===================== 7. BOTTOM ACTION DOCK =====================
+        BoxLayout:
             size_hint_y: None
-            height: dp(34)
-        Label:
-            text: "THANS"
-            bold: True
-            font_size: sp(24)
-            color: app.tok["FG"]
-            size_hint_y: None
-            height: dp(32)
-        Label:
-            text: "Your files, by voice or by thumb.\nEverything stays on this phone."
-            font_size: sp(12)
-            color: app.tok["FG_DIM"]
-            size_hint_y: None
-            height: dp(40)
-        Widget:
-            size_hint_y: None
-            height: dp(4)
-        RoundedButton:
-            text: app.sym["wand"] + "  Organize this folder"
-            subtle: True
-            font_size: sp(12)
-            size_hint_y: None
-            height: dp(38)
-            on_release: app.starter("organize .")
-        RoundedButton:
-            text: app.sym["search"] + "  Find a file"
-            subtle: True
-            font_size: sp(12)
-            size_hint_y: None
-            height: dp(38)
-            on_release: app.starter("find ")
-        RoundedButton:
-            text: app.sym["folder"] + "  Create a folder"
-            subtle: True
-            font_size: sp(12)
-            size_hint_y: None
-            height: dp(38)
-            on_release: app.starter("create folder ")
-        Widget:
-            size_hint_y: None
-            height: dp(2)
-        Label:
-            text: app.working_root
-            font_size: sp(10)
-            color: app.tok["FG_FAINT"]
-            size_hint_y: None
-            height: dp(26)
-            shorten: True
-            text_size: self.size
-
-    # ----------------------------------------------------------------- toasts
-    BoxLayout:
-        id: toasts
-        orientation: "vertical"
-        size_hint: None, None
-        width: Window.width - dp(24)
-        height: dp(200)
-        pos_hint: {"center_x": 0.5, "top": 0.98}
-        spacing: dp(6)
+            height: dp(42)
+            spacing: dp(6)
+            RoundedButton:
+                id: btn_mic
+                text: "🎤 MIC"
+                font_size: sp(12)
+                on_release: app.toggle_mic()
+            RoundedButton:
+                text: "❓ HELP"
+                font_size: sp(12)
+                on_release: app.say_help()
+            RoundedButton:
+                text: "🧹 CLEAR"
+                font_size: sp(12)
+                on_release: app.clear_chat()

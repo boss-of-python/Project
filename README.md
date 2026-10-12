@@ -19,39 +19,40 @@ THANS: Moved 23 files into 4 folders in 'downloads'.
 
 | Layer | Technology | Model size | Internet? |
 |-------|-----------|-----------|-----------|
-| Speech → text | **Vosk** (small EN-US model) | ≈ 40 MB | only to download once |
+| Speech → text | **Vosk** (small EN-US model, live partial + RMS level) | ≈ 40 MB | only to download once |
 | Text → speech | **pyttsx3** (OS voices: SAPI5 / NSSpeech / espeak) | 0 MB | never |
-| Command parsing | **Rule parser** (instant, zero deps) — always on | 0 MB | never |
+| Command parsing | **Rule parser + Live Intent Preview** (instant, zero deps) | 0 MB | never |
 | Free-form parsing | **Optional tiny LLM** via llama.cpp (GGUF in `models/`) | ≈ 408 MB default | only to download once |
-| UI | **tkinter** (Python standard library) | 0 MB | never |
+| Desktop UI | **tkinter** (60fps Sonic Visualizer, Live File Sidebar, Dark/Light themes) | 0 MB | never |
+| Android UI | **Kivy** (Animated cards, Sonic Wave bar, Chat + Visual File Explorer tabs) | 0 MB | never |
 
 The rule parser handles **every command in the reference below** without any
 model, so the app is fully functional even before models are downloaded.
 The small LLM (default **Qwen2.5-0.5B-Instruct Q4_K_M**) is optional sugar for
 loose phrasing — it is switched off by default and can be enabled in Settings.
 
-## The interface
+## Minimalistic UI, UX & Animations (Desktop & Android)
 
-A calm dark surface with one accent ramp, built entirely from canvas-drawn
-widgets so it can move: bubbles slide and fade, answers *type themselves* in
-behind a caret, the composer breathes while THANS works, toasts stack in the
-corner, and a start screen runs the real boot steps instead of a fake
-progress bar. Everything animates from a single 60 fps loop, so the app stays
-smooth and never blocks on a file operation.
+* **60fps Sonic Visualizer:** Multi-ribbon sine wave + breathing orb in the header that dynamically responds to **Idle**, **Listening** (live microphone RMS amplitude), **Thinking**, **Speaking**, and **Success/Error** states.
+* **Real-Time Intent Preview Pill:** As you type, THANS previews the exact parsed action (`📁+ Create folder 'work'`, `♻️ Delete 'todo.txt' · moves to .thans_trash`) before you even press Enter.
+* **Smart Autocomplete (`Tab` / `⚡ Complete`):** Completes command starters (`cre` → `create folder `) and live filenames from the active folder.
+* **Live File Workspace Inspector & Diff Pulse:** Interactive split-pane sidebar (Desktop) and `📁 Files` tab (Android) with instant filtering, smart file-type icons, human-readable sizes, double-click navigation, and an **animated emerald highlight pulse** on newly created or modified items.
+* **Interactive Breadcrumbs & Quick-Action Chips:** Navigate folders via clickable breadcrumbs (`🏠 root › work › reports` or `⬆ Up`) and trigger common actions (`📁 List`, `➕ Folder`, `📝 File`, `✨ Organize`, `🔍 Find`, `↩ Undo`, `❓ Help`) with one tap.
+* **Curated Dark & Light Themes:** Smooth cross-fade transition (`☀️ / 🌙` or `Ctrl+T`).
+* **Keyboard Shortcuts (Desktop):** `Ctrl+K` focus input · `Tab` autocomplete · `Ctrl+Z` undo · `Ctrl+B` toggle file sidebar · `Ctrl+T` toggle theme · `Ctrl+L` clear chat · `F2` toggle voice mic.
 
-| | Desktop | Android |
-|---|---|---|
-| Layout | transcript + live dashboard (files · folders · size · free space) | transcript + hero card, thumb-reachable composer |
-| Input | typing with as-you-type suggestions, Enter/Tab/↑↓, mic on `F2` | same suggestions, on-screen keyboard, mic button |
-| Feedback | streaming replies, thinking dots, toasts, status pills, confetti on a tidy-up | same, tuned for touch (bigger targets, toast stack) |
-| Keyboard | `F1` command sheet · `F2` voice · `F5` rescan · `Ctrl+K` clear · `Ctrl+Z` undo · `Ctrl+,` settings · `Ctrl +/-` text size | — |
-| Motion | on by default, switchable off in Settings ("Animations") | derived from the same tokens/durations |
+## Design system
 
-Design tokens live in **`thans/ui/theme.py`** (palette, radii, durations, type
-scale, glyph sets); the phone theme (`android/thans_android/theme.py`) *derives*
-from them, so both apps are always the same product. `python
-scripts/render_ui_preview.py` renders the picture above straight from those
-tokens — it cannot drift from the app.
+One palette, one set of easings, one geometry source for both apps:
+**`thans/animations.py`** (dark *and* light themes, `lerp_color`, easings, the
+sonic-wave geometry, the streaming chunker) and **`thans/ui_helpers.py`**
+(breadcrumbs, directory snapshots, file icons/sizes, quick chips, the live
+intent preview and autocomplete). Both are GUI-free and fully unit-tested, and
+the Android app imports the very same modules — so the phone UI cannot drift
+from the desktop palette.
+
+`python scripts/render_ui_preview.py` renders the picture at the top of this
+file *from those tokens*, so the screenshots in the docs cannot go stale.
 
 ## Headless & scriptable
 
@@ -87,6 +88,9 @@ python -m thans
 #   --no-tts          mute the spoken replies
 #   --models          show which models are installed
 #   --selftest        run the built-in test suite (headless)
+#   --run "<cmd>"     run a command without any window (repeatable)
+#   --cli             interactive prompt without any window
+#   --json            machine-readable output for --run
 ```
 
 Debian/Ubuntu: `sudo apt install python3-tk` first (tkinter).
@@ -95,18 +99,22 @@ Debian/Ubuntu: `sudo apt install python3-tk` first (tkinter).
 
 | Command | Example |
 |---------|---------|
-| List | `list` · `show files` · `show reports in work` · `what's in downloads` · `how many files in docs` |
+| List | `list` · `show files` · `show reports in work` · `what's in downloads` |
 | Create folder | `create folder work/reports` · `make a folder called ideas in notes` |
 | Create file | `create file todo.txt` · `create file memo.txt with meeting at 3 in notes` |
 | Rename | `rename old.txt to new.txt` |
 | Move | `move report.pdf to work` · `move a.txt into docs` |
 | Copy | `copy report.pdf to backups` |
 | Delete | `delete old.txt` (→ trash; say `undo` to restore) · `delete old.txt permanently` |
-| Search | `find invoice` · `search for pdf files` · `find *.log` |
+| Count | `how many files in docs` · `count files` · `number of folders here` |
 | Open | `open notes` (opens in default app / file manager) · `show in folder report.pdf` |
 | Organize | `organize downloads` (by extension) · `organize downloads by date` |
-| Navigate | `go to work` · `cd work/reports` · `cd` (back to root) |
-| Safety net | `undo` (last action) · `help` |
+| Search | `find invoice` · `search for pdf files` · `find *.log` · `find logo.png in assets` |
+| Navigate | `go to work` · `cd work/reports` · `cd` (back to root) · `go up` |
+
+Say **"here"** or **"."** to mean the folder you are standing in
+(`organize .`, `list this folder`, `how many files in .`) and **"in <folder>"**
+to point at another one (`find invoice in docs`).
 
 Deletes go to `.thans_trash` inside your working root by default — nothing is
 destroyed unless you explicitly say *permanently* (or enable it in Settings).
@@ -164,7 +172,9 @@ capability matrix and local buildozer instructions).
 
 ```
 thans/            the app (GUI, engine, parsers, actions, audio)
-thans/ui/         design system: theme tokens, widget kit, transcript, panels
+thans/animations.py  themes, easings, sonic-wave geometry, stream chunker
+thans/ui_helpers.py  breadcrumbs, dir snapshots, icons, intent preview, autocomplete
+thans/cli.py      headless runner (no tkinter import) behind --run / --cli
 thans/actions/    file & folder operations (safety-checked)
 models/           dedicated folder for all offline models
 scripts/          download_models.py, build_installer.py

@@ -24,11 +24,8 @@ def main() -> int:
             "--noconfirm", "--clean", "--windowed",
             "--name", "THANS",
             "--paths", str(ROOT),
-            "--hidden-import", "thans.ui",
-            "--hidden-import", "thans.ui.theme",
-            "--hidden-import", "thans.ui.widgets",
-            "--hidden-import", "thans.ui.chat",
-            "--hidden-import", "thans.ui.panels",
+            "--hidden-import", "thans.animations",
+            "--hidden-import", "thans.ui_helpers",
             "thans/__main__.py"]
     if onedir:
         args.insert(1, "--onedir")

@@ -1,415 +1,457 @@
-"""THANS Android — Kivy front-end around the shared offline ``thans`` engine.
+"""THANS Android — minimalistic, animated Kivy front-end around the shared offline thans engine.
 
-Same command set, same design tokens and same motion language as the desktop
-build (see ``theme.py`` — it *derives* from the desktop palette, so the two
-apps cannot drift apart). Voice in/out is best-effort through Android's own
-speech services; text commands always work, fully offline.
-
-Layout lives in ``thans.kv``; this module owns state, animation and the engine.
+Highlights:
+  * Same offline engine & UX intelligence (`thans.engine`, `thans.ui_helpers`, `thans.animations`)
+  * Curated Dark & Light themes with reactive Kivy properties
+  * Animated Sonic Wave indicator reacting to Idle, Listening (RMS), Thinking, and Success/Error
+  * Segmented Dual View: `💬 Chat` (animated message cards) and `📁 Files` (touch file explorer)
+  * Live Intent Preview pill as you type + one-tap Quick-Action Chips & `⚡ Complete`
+  * Guarded Android SpeechRecognizer (with runtime permissions, partial transcripts, and RMS) + TTS
 """
 from __future__ import annotations
 
-import json
 import os
 import sys
-from pathlib import Path
+from typing import Optional
 
-# make the staged core package importable
+# Make the staged core package importable
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
-from kivy.animation import Animation                                  # noqa: E402
-from kivy.app import App                                              # noqa: E402
-from kivy.clock import Clock                                          # noqa: E402
-from kivy.core.window import Window                                   # noqa: E402
-from kivy.lang import Builder                                         # noqa: E402
-from kivy.metrics import dp, sp                                       # noqa: E402
-from kivy.properties import BooleanProperty, DictProperty, ListProperty, StringProperty  # noqa: E402
-from kivy.uix.floatlayout import FloatLayout                          # noqa: E402
+from kivy.animation import Animation  # noqa: E402
+from kivy.app import App  # noqa: E402
+try:
+    from kivy.builder import Builder  # noqa: E402  (kivy <= 2.3.0)
+except ImportError:
+    from kivy.lang.builder import Builder  # noqa: E402  (kivy >= 2.3.1)
+from kivy.clock import Clock  # noqa: E402
+from kivy.metrics import dp, sp  # noqa: E402
+from kivy.properties import ListProperty, StringProperty  # noqa: E402
+from kivy.uix.boxlayout import BoxLayout  # noqa: E402
+from kivy.uix.button import Button  # noqa: E402
+from kivy.uix.label import Label  # noqa: E402
 
-from thans.engine import Engine                                       # noqa: E402
-from thans.ui import logic                                            # noqa: E402
+from thans import animations, ui_helpers  # noqa: E402
+from thans.engine import Engine  # noqa: E402
 
-from . import audio                                                   # noqa: E402
-from . import theme as T                                              # noqa: E402
-from .widgets import Bubble, RoundedButton, Toast                     # noqa: E402
+from . import audio  # noqa: E402
 
-KV_FILE = "thans.kv"
-PREFS_FILE = "thans_prefs.json"
-
-
-class ThansRoot(FloatLayout):
-    """Root widget defined by ``thans.kv`` (holds every id the app talks to)."""
+SONIC_GLYPHS = ("▁", "▂", "▃", "▄", "▅", "▆", "▇", "█")
 
 
 class ThansAndroidApp(App):
-    # ---- properties the KV file binds to
-    tok = DictProperty({})
-    sym = DictProperty({})
-    working_root = StringProperty("")
-    mic_unavailable = BooleanProperty(False)
-    rail_color = ListProperty(list(T.ACCENT_HI))
+    # Reactive theme properties referenced by thans.kv
+    theme_name = StringProperty("dark")
+    active_tab = StringProperty("chat")
 
-    # ------------------------------------------------------------------ setup
-    def build(self):
-        self.tok = {
-            "BG": list(T.BG), "BG_RAISED": list(T.BG_RAISED), "SURFACE": list(T.SURFACE),
-            "SURFACE_HI": list(T.SURFACE_HI), "BORDER": list(T.BORDER),
-            "FG": list(T.FG), "FG_DIM": list(T.FG_DIM), "FG_FAINT": list(T.FG_FAINT),
-            "ACCENT": list(T.ACCENT), "ACCENT_HI": list(T.ACCENT_HI),
-            "ACCENT2": list(T.ACCENT2), "OK": list(T.OK), "WARN": list(T.WARN),
-            "ERR": list(T.ERR), "USER_BG": list(T.USER_BG), "SYS_BG": list(T.SYS_BG),
-        }
-        self.sym = dict(T.SYM)
+    bg_color = ListProperty(list(animations.hex_to_rgba("#0d0f14")))
+    panel_color = ListProperty(list(animations.hex_to_rgba("#13161f")))
+    panel2_color = ListProperty(list(animations.hex_to_rgba("#1a1e2b")))
+    fg_color = ListProperty(list(animations.hex_to_rgba("#eef0f6")))
+    dim_color = ListProperty(list(animations.hex_to_rgba("#6e778c")))
+    accent_color = ListProperty(list(animations.hex_to_rgba("#5b8af5")))
+    ok_color = ListProperty(list(animations.hex_to_rgba("#10b981")))
+    warn_color = ListProperty(list(animations.hex_to_rgba("#f59e0b")))
+    err_color = ListProperty(list(animations.hex_to_rgba("#f43f5e")))
+    sonic_color = ListProperty(list(animations.hex_to_rgba("#5b8af5")))
 
-        kv_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", KV_FILE)
-        self._root = Builder.load_file(kv_path)
-
-        # python-for-android starts the app with cwd = its private files dir —
-        # the only storage it may manage without extra permissions.
-        workdir = os.getcwd()
-        self.working_root = workdir
-        self.engine = Engine(workdir, {"root": workdir, "tts": False,
-                                       "use_llm": False, "permanent_delete": False})
-        self.prefs = self._load_prefs()
-        self.speak_on = bool(self.prefs.get("speak", False)) and audio.tts_available()
+    def __init__(self, workdir: Optional[str] = None, **kwargs):
+        super().__init__(**kwargs)
+        self._workdir = workdir
+        self._root = None
+        self.engine: Optional[Engine] = None
+        self.speak_on = False
         self.mic_active = False
-        self.busy = False
-        self._suggest_pills: list[RoundedButton] = []
-        self._last_user = ""
 
-        self.mic_unavailable = not audio.stt_available()
-        if not self.mic_unavailable:
-            Window.bind(on_keyboard=self._on_key)
-        self._boot()
+        # Sonic animation state
+        self.sonic_state = "idle"
+        self.sonic_phase = 0.0
+        self.sonic_level = 0.0
+        self._flash_ticks = 0
+
+        # Chat history & workspace snapshot
+        self.chat_records: list[tuple[str, str, str]] = []  # (who, text, kind)
+        self.snapshot: Optional[ui_helpers.DirSnapshot] = None
+
+    def build(self):
+        kv = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "thans.kv")
+        loaded = Builder.load_file(kv)
+        # Support both real Kivy (load_file returns root) and any legacy test shim
+        if loaded is None and hasattr(Builder, "get_root"):
+            loaded = Builder.get_root()
+        self._root = loaded
+
+        workdir = self._workdir or os.getcwd()
+        self.engine = Engine(
+            workdir,
+            {
+                "root": workdir,
+                "tts": False,
+                "use_llm": False,
+                "permanent_delete": False,
+            },
+        )
+
+        self._apply_theme("dark")
+        self._refresh_workspace()
+
+        self._add("THANS", f"Welcome! Working folder: {workdir}", "sys")
+        self._add(
+            "THANS",
+            "Tap any quick chip below, switch to 📁 Files to browse visually, "
+            "or type/speak a command.",
+            "sys",
+        )
+        self._set_status(f"● ready · {self.snapshot.rel_current if self.snapshot else workdir}")
+        Clock.schedule_interval(self._animate_tick, 0.05)
         return self._root
 
-    # ------------------------------------------------------------------- boot
-    def _boot(self) -> None:
-        """Splash: mark + wordmark grow in, sweep runs, then the app fades in."""
-        ids = self._ids()
-        ids.boot_mark.font_size = sp(14)
-        ids.boot_word.font_size = sp(14)
-        Animation(font_size=sp(30), duration=T.D_SLOW, t="out_back").start(ids.boot_mark)
-        Animation(font_size=sp(34), duration=T.D_SLOW, t="out_back").start(ids.boot_word)
-        Clock.schedule_once(lambda _dt: self._fade(ids.boot_sub, 1.0, T.D_BASE), 0.20)
-        ids.boot_bar.active = True
-        Clock.schedule_once(lambda _dt: self._boot_status("checking offline models"), 0.45)
-        Clock.schedule_once(lambda _dt: self._boot_status("ready — everything runs on this device"), 0.80)
-        Clock.schedule_once(lambda _dt: self._boot_finish(), 1.25)
-
-    def _boot_status(self, text: str) -> None:
-        ids = self._ids()
-        ids.boot_status.text = text
-        if ids.boot_status.opacity < 1:
-            self._fade(ids.boot_status, 1.0, T.D_BASE)
-
-    def _boot_finish(self) -> None:
-        ids = self._ids()
-        ids.boot_bar.active = False
-        anim = Animation(opacity=0.0, duration=T.D_BASE, t="out_cubic")
-        anim.bind(on_complete=lambda *_: self._after_boot())
-        anim.start(ids.boot)
-
-    def _after_boot(self) -> None:
-        ids = self._ids()
-        if ids.boot.parent:
-            ids.boot.parent.remove_widget(ids.boot)
-        self._fade(ids.main, 1.0, T.D_BASE)
-        self._reveal_hero()
-        self._welcome()
-        self._status(f"ready · {os.path.basename(self.working_root) or self.working_root}")
-        if self.speak_on:
-            self._refresh_chips()
-
-    # ---------------------------------------------------------------- helpers
+    # ------------------------------------------------------------ helpers
     def _ids(self):
         return self._root.ids
 
-    def _fade(self, widget, target: float, duration: float) -> None:
-        Animation(opacity=target, duration=duration, t="out_cubic").start(widget)
-
-    def _status(self, text: str) -> None:
+    def _set_status(self, text: str) -> None:
         self._ids().status.text = text
 
-    def _refresh_chips(self) -> None:
-        ids = self._ids()
-        if self.mic_unavailable:
-            ids.chip_voice.set_state("voice: text only", T.FG_FAINT)
-        elif self.mic_active:
-            ids.chip_voice.set_state("listening…", T.ACCENT2)
-        else:
-            ids.chip_voice.set_state("SPEAK: ON" if self.speak_on else "SPEAK: OFF",
-                                     T.OK if self.speak_on else T.FG_DIM)
+    def _apply_theme(self, name: str) -> None:
+        self.theme_name = name
+        pal = animations.get_theme(name)
+        self.bg_color = list(animations.hex_to_rgba(pal["bg"]))
+        self.panel_color = list(animations.hex_to_rgba(pal["panel"]))
+        self.panel2_color = list(animations.hex_to_rgba(pal["panel2"]))
+        self.fg_color = list(animations.hex_to_rgba(pal["fg"]))
+        self.dim_color = list(animations.hex_to_rgba(pal["dim"]))
+        self.accent_color = list(animations.hex_to_rgba(pal["accent"]))
+        self.ok_color = list(animations.hex_to_rgba(pal["ok"]))
+        self.warn_color = list(animations.hex_to_rgba(pal["warn"]))
+        self.err_color = list(animations.hex_to_rgba(pal["err"]))
+        if self._root and "btn_theme" in self._ids():
+            self._ids().btn_theme.text = "☀️" if name == "dark" else "🌙"
 
-    def _set_busy(self, busy: bool) -> None:
-        ids = self._ids()
-        self.busy = busy
-        if busy:
-            ids.dots.running = True
-            ids.busy_bar.active = True
-            self._fade(ids.busy_bar, 1.0, T.D_FAST)
-            ids.input_card.glow(True)
+    def toggle_theme(self) -> None:
+        nxt = "light" if self.theme_name == "dark" else "dark"
+        self._apply_theme(nxt)
+        if self.active_tab == "files":
+            self._render_files_view()
         else:
-            ids.dots.running = False
-            ids.busy_bar.active = False
-            self._fade(ids.busy_bar, 0.0, T.D_BASE)
-            ids.input_card.glow(False)
+            self._render_chat_view()
 
-    # ------------------------------------------------------------------- chat
-    def _add_bubble(self, who: str, text: str, kind: str = "thans") -> Bubble:
-        bubble = Bubble(who=who, body=text, kind=kind)
+    # ------------------------------------------------------------ animations
+    def _animate_tick(self, _dt: float) -> None:
+        speed = 0.28 if self.sonic_state != "idle" else 0.10
+        self.sonic_phase = (self.sonic_phase + speed) % 62.83
+        if self._flash_ticks > 0:
+            self._flash_ticks -= 1
+            if self._flash_ticks == 0 and not self.mic_active:
+                self.sonic_state = "idle"
+
+        bars = animations.compute_equalizer_bars(
+            7, phase=self.sonic_phase, state=self.sonic_state, level=self.sonic_level
+        )
+        glyph_str = "".join(
+            SONIC_GLYPHS[min(len(SONIC_GLYPHS) - 1, int(b * len(SONIC_GLYPHS)))] for b in bars
+        )
+        state_hex = animations.STATE_COLORS.get(self.sonic_state, animations.STATE_COLORS["idle"])[0]
+        self.sonic_color = list(animations.hex_to_rgba(state_hex))
+        if self._root and "sonic_indicator" in self._ids():
+            self._ids().sonic_indicator.text = glyph_str
+
+    # ------------------------------------------------------------ workspace & tabs
+    def _refresh_workspace(self) -> None:
+        if not self.engine:
+            return
+        self.snapshot = ui_helpers.dir_snapshot(
+            self.engine.root, self.engine.current, prev=self.snapshot
+        )
+        ids = self._ids()
+        if "crumb_label" in ids:
+            crumbs_txt = " › ".join(lbl for lbl, _ in self.snapshot.breadcrumbs)
+            ids.crumb_label.text = crumbs_txt
+        if "btn_tab_files" in ids:
+            total = self.snapshot.folder_count + self.snapshot.file_count
+            ids.btn_tab_files.text = f"📁 Files ({total})"
+        if "btn_undo_top" in ids:
+            t_cnt = self.snapshot.trash_count
+            ids.btn_undo_top.text = f"↩ {t_cnt}" if t_cnt > 0 else "↩"
+
+    def switch_tab(self, tab: str) -> None:
+        self.active_tab = tab if tab in ("chat", "files") else "chat"
+        if self.active_tab == "files":
+            self._refresh_workspace()
+            self._render_files_view()
+        else:
+            self._render_chat_view()
+
+    def navigate_up(self) -> None:
+        self.run_quick_command("go back")
+
+    # ------------------------------------------------------------ chat & file rendering
+    def _kind_color(self, kind: str) -> list[float]:
+        pal = animations.get_theme(self.theme_name)
+        hex_c = {
+            "you": pal["user_msg"],
+            "thans": pal["asst_msg"],
+            "cmd": pal["cmd_pill"],
+            "ok": pal["ok"],
+            "err": pal["err"],
+            "sys": pal["dim"],
+        }.get(kind, pal["fg"])
+        return list(animations.hex_to_rgba(hex_c))
+
+    def _make_chat_label(self, who: str, text: str, kind: str, animate: bool = True) -> Label:
+        color = self._kind_color(kind)
+        prefix = f"[b]{who}[/b]  " if who else ""
+        lbl = Label(
+            text=f"{prefix}{text}",
+            markup=True,
+            color=color,
+            size_hint_y=None,
+            halign="left",
+            valign="top",
+            font_size=sp(14),
+            opacity=0.15 if animate else 1.0,
+        )
+        lbl.bind(
+            width=lambda inst, w: setattr(inst, "text_size", (max(100, w - dp(12)), None)),
+            texture_size=lambda inst, ts: setattr(inst, "height", max(dp(26), ts[1] + dp(10))),
+        )
+        lbl.height = max(dp(28), lbl.texture_size[1] + dp(10))
+        if animate:
+            try:
+                Animation(opacity=1.0, d=0.20, t="out_cubic").start(lbl)
+            except Exception:
+                lbl.opacity = 1.0
+        return lbl
+
+    def _add(self, who: str, text: str, kind_or_color="sys") -> None:
+        kind = kind_or_color if isinstance(kind_or_color, str) else "sys"
+        self.chat_records.insert(0, (who, text, kind))
+        if self.active_tab != "chat":
+            return
         box = self._ids().chat_box
-        box.add_widget(bubble, index=0)                     # newest on top
-        bubble.reveal()
-        Clock.schedule_once(lambda _dt: self._scroll_top(), 0.08)
-        return bubble
+        lbl = self._make_chat_label(who, text, kind, animate=True)
+        # Support both standard Kivy BoxLayout.add_widget and any mock list shim
+        if hasattr(box, "add_widget"):
+            box.add_widget(lbl, index=len(box.children))
+        elif hasattr(box, "insert"):
+            box.insert(0, lbl)
+        self._scroll_top()
+
+    def _render_chat_view(self) -> None:
+        box = self._ids().chat_box
+        box.clear_widgets()
+        for who, text, kind in reversed(self.chat_records[:80]):
+            lbl = self._make_chat_label(who, text, kind, animate=False)
+            if hasattr(box, "add_widget"):
+                box.add_widget(lbl, index=len(box.children))
+            elif hasattr(box, "insert"):
+                box.insert(0, lbl)
+        self._scroll_top()
+
+    def _render_files_view(self) -> None:
+        box = self._ids().chat_box
+        box.clear_widgets()
+        if not self.snapshot or not self.snapshot.entries:
+            empty_lbl = self._make_chat_label(
+                "📂 Empty Folder",
+                "No files here yet. Tap '➕ Folder' or '📝 File' below to create one.",
+                "sys",
+                animate=True,
+            )
+            if hasattr(box, "add_widget"):
+                box.add_widget(empty_lbl)
+            return
+
+        for entry in self.snapshot.entries:
+            row = BoxLayout(
+                orientation="horizontal",
+                size_hint_y=None,
+                height=dp(40),
+                spacing=dp(6),
+                opacity=0.2,
+            )
+            main_btn = Button(
+                text=f"{entry.icon}  {entry.name}   ({entry.size_label})",
+                halign="left",
+                valign="middle",
+                font_size=sp(13),
+                background_normal="",
+                background_color=(
+                    list(self.ok_color[:3]) + [0.22]
+                    if entry.is_changed
+                    else self.panel2_color
+                ),
+                color=self.fg_color,
+            )
+            main_btn.bind(
+                size=lambda inst, sz: setattr(inst, "text_size", (max(60, sz[0] - dp(16)), None))
+            )
+            if entry.is_dir:
+                main_btn.bind(on_release=lambda _b, n=entry.name: self.run_quick_command(f"go to {n}"))
+            else:
+                main_btn.bind(on_release=lambda _b, n=entry.name: self.prefill_input(f"rename {n} to "))
+
+            del_btn = Button(
+                text="♻️",
+                size_hint_x=None,
+                width=dp(44),
+                font_size=sp(13),
+                background_normal="",
+                background_color=self.panel2_color,
+                color=self.warn_color,
+            )
+            del_btn.bind(on_release=lambda _b, n=entry.name: self.run_quick_command(f"delete {n}"))
+
+            row.add_widget(main_btn)
+            row.add_widget(del_btn)
+            box.add_widget(row)
+            try:
+                Animation(opacity=1.0, d=0.18, t="out_cubic").start(row)
+            except Exception:
+                row.opacity = 1.0
 
     def _scroll_top(self) -> None:
-        scroll = self._ids().chat_scroll
-        scroll.scroll_y = 1.0
+        def _do(_dt):
+            sc = self._ids().chat_scroll
+            if hasattr(sc, "scroll_y"):
+                sc.scroll_y = 1.0
+            if hasattr(sc, "set_normalized_y"):
+                sc.set_normalized_y(1)
 
-    def _welcome(self) -> None:
-        root_name = os.path.basename(self.working_root.rstrip("/")) or self.working_root
-        self._add_bubble("THANS",
-                         f"{logic.greeting()}! This is your private workspace — "
-                         f"'{root_name}'. Everything happens on this phone, nothing "
-                         f"is uploaded.",
-                         "thans")
-        if self.mic_unavailable:
-            self._add_bubble("THANS",
-                             "No speech service on this device, so voice is off — "
-                             "typing works exactly the same. Try 'help'.",
-                             "system")
+        Clock.schedule_once(_do, 0.04)
+
+    # ------------------------------------------------------------ live preview & chips
+    def on_input_change(self, text: str) -> None:
+        if not self._root or "preview_label" not in self._ids():
+            return
+        cur = self.engine.current if self.engine else None
+        prev = ui_helpers.preview_intent(text, cur)
+        lbl = self._ids().preview_label
+        sub = f" · {prev.subtitle}" if prev.subtitle else ""
+        lbl.text = f"{prev.icon} {prev.title}{sub}"
+        if prev.state == "matched":
+            lbl.color = self.ok_color
+        elif prev.state == "partial":
+            lbl.color = self.accent_color
+        elif prev.state == "unknown":
+            lbl.color = self.warn_color
         else:
-            self._add_bubble("THANS",
-                             "Tap the mic and talk, or type. Try 'create folder notes', "
-                             "'find pdf', 'organize .'", "system")
+            lbl.color = self.dim_color
 
-    def toast(self, text: str, kind: str = "info") -> None:
-        host = self._ids().toasts
-        t = Toast(text=text, kind=kind, size_hint=(None, None), height=dp(38),
-                  width=min(Window.width - dp(24), max(dp(220), dp(13) * len(text) * 0.55)))
-        host.add_widget(t)
-        t.opacity = 0.0
-        t.show(on_done=lambda: host.remove_widget(t) if t.parent else None)
+    def prefill_input(self, text: str) -> None:
+        inp = self._ids().input
+        inp.text = text
+        inp.focus = True
+        self.on_input_change(text)
 
-    # --------------------------------------------------------------- commands
+    def complete_input(self) -> None:
+        inp = self._ids().input
+        cur = self.engine.current if self.engine else None
+        completed = ui_helpers.autocomplete(inp.text, cur)
+        inp.text = completed
+        self.on_input_change(completed)
+
+    def run_quick_command(self, cmd_text: str) -> None:
+        self._add("You", cmd_text, "you")
+        Clock.schedule_once(lambda dt: self._run(cmd_text), 0.03)
+
+    # ------------------------------------------------------------ commands
     def send_input(self) -> None:
         inp = self._ids().input
-        text = (inp.text or "").strip()
+        text = inp.text.strip()
         if not text:
-            self.toast("Type a command first — try 'help'", "warn")
             return
         inp.text = ""
-        self.run_command(text, who="You")
+        self.on_input_change("")
+        if self.active_tab != "chat":
+            self.switch_tab("chat")
+        self._add("You", text, "you")
+        Clock.schedule_once(lambda dt: self._run(text), 0.04)
 
-    def run_quick(self, text: str) -> None:
-        """Quick-action buttons and the hero chips both land here."""
-        self._dismiss_hero()
-        self.run_command(text, who="You")
-
-    def starter(self, text: str) -> None:
-        self._dismiss_hero()
-        self._ids().input.text = text
-        if not text.endswith(" "):
-            self.send_input()
-        else:
-            self._ids().input.focus = True
-
-    def run_command(self, text: str, who: str = "You") -> None:
-        self._dismiss_hero()
-        self._last_user = text
-        self._add_bubble(who, text, "you")
-        self._set_busy(True)
-        self._status("thinking…")
-        self._hide_suggestions()
-        Clock.schedule_once(lambda _dt: self._execute(text), T.D_FAST)
-
-    def _execute(self, text: str) -> None:
+    def _run(self, text: str) -> None:
+        self.sonic_state = "thinking"
         try:
             res = self.engine.run(text)
-        except Exception as e:                                   # noqa: BLE001
-            self._set_busy(False)
-            self._add_bubble("THANS", f"Internal error: {e}", "error")
-            self.toast("Something went wrong", "error")
+        except Exception as e:  # noqa: BLE001
+            self.sonic_state = "error"
+            self._flash_ticks = 18
+            self._add("THANS", f"Error: {e}", "err")
             return
-        self._set_busy(False)
-        kind = "thans" if res.ok else "error"
-        title = "THANS" + (f" · {res.source}" if res.source else "")
-        self._add_bubble(title, res.message, kind)
-        self._status(f"in {self._rel(self.engine.current)}  ·  {self.working_root}")
-        if not res.ok:
-            self.toast(logic.truncate(res.message, 52), "error")
-        elif logic.should_celebrate(res.command, res.ok):
-            self.toast("Nice — that's tidier now", "ok")
+
+        self.sonic_state = "success" if res.ok else "error"
+        self._flash_ticks = 20
+        if res.command:
+            self._add("⚡", res.command, "cmd")
+        self._add("THANS", res.message, "thans" if res.ok else "err")
+        self._refresh_workspace()
+        if self.active_tab == "files":
+            self._render_files_view()
+        self._set_status(f"● folder: {self.snapshot.rel_current if self.snapshot else self.engine.current}")
         if self.speak_on:
             audio.speak(res.message)
 
-    def _rel(self, path) -> str:
-        try:
-            return Path(path).relative_to(self.engine.root).as_posix() or "."
-        except ValueError:
-            return str(path)
+    def say_help(self) -> None:
+        if self.active_tab != "chat":
+            self.switch_tab("chat")
+        Clock.schedule_once(lambda dt: self._run("help"), 0.04)
 
     def clear_chat(self) -> None:
-        box = self._ids().chat_box
-        box.clear_widgets()
-        self._add_bubble("THANS", "Transcript cleared — still on this device only.", "system")
+        self.chat_records.clear()
+        self._ids().chat_box.clear_widgets()
+        self._add("THANS", "Chat cleared.", "sys")
 
-    def say_help(self) -> None:
-        self.run_command("help", who="You")
-
-    def show_capabilities(self) -> None:
-        """The 'rule parser' chip explains what runs on the phone."""
-        self.toast("Commands are understood on-device by the rule parser", "ok")
-
-    # ------------------------------------------------------------ suggestions
-    def on_input_text(self, text: str) -> None:
-        if not (text or "").strip():            # idle input: keep the row tidy
-            self._hide_suggestions()
-            return
-        names, dirs = [], []
-        try:
-            names = [p.name for p in self.engine.current.iterdir()][:80]
-            dirs = [p.name for p in self.engine.current.iterdir() if p.is_dir()][:40]
-        except OSError:
-            pass
-        items = logic.suggest(text or "", names, dirs, limit=4)
-        box = self._ids().suggest_box
-        for pill in self._suggest_pills:
-            if pill.parent:
-                pill.parent.remove_widget(pill)
-        self._suggest_pills.clear()
-        if not items:
-            self._hide_suggestions()
-            return
-        for item in items:
-            pill = RoundedButton(text=logic.truncate(item, 24), subtle=True,
-                                 font_size=sp(11), size_hint=(None, None),
-                                 height=dp(28), width=dp(9) * (len(item) + 4))
-            pill.bind(on_release=lambda _b, t=item: self._accept(t))
-            box.add_widget(pill)
-            self._suggest_pills.append(pill)
-        scroll = self._ids().suggest_scroll
-        scroll.height = dp(32)
-        self._fade(scroll, 1.0, T.D_FAST)
-
-    def _accept(self, text: str) -> None:
-        self._ids().input.text = text
-        self._ids().input.focus = True
-
-    def _hide_suggestions(self) -> None:
-        scroll = self._ids().suggest_scroll
-        box = self._ids().suggest_box
-        if not self._suggest_pills and scroll.height <= 0:
-            return
-
-        def collapse(_dt):
-            scroll.height = 0
-            for pill in list(self._suggest_pills):
-                if pill.parent:
-                    pill.parent.remove_widget(pill)
-            self._suggest_pills.clear()
-
-        self._fade(scroll, 0.0, T.D_FAST)
-        Clock.schedule_once(collapse, T.D_FAST)
-
-    # ------------------------------------------------------------------- hero
-    def _dismiss_hero(self) -> None:
-        hero = self._ids().hero
-        if hero.opacity < 0.05 or getattr(self, "_hero_gone", False):
-            return
-        self._hero_gone = True
-        self._fade(hero, 0.0, T.D_BASE)
-
-    def _reveal_hero(self) -> None:
-        hero = self._ids().hero
-        hero.pos_hint = {"center_x": 0.5, "center_y": 0.52}
-        hero.opacity = 0.0
-        Animation(opacity=1.0, duration=T.D_SLOW, t="out_cubic").start(hero)
-        Clock.schedule_once(lambda _dt: setattr(
-            hero, "pos_hint", {"center_x": 0.5, "center_y": 0.56}), T.D_FAST)
-
-    # ------------------------------------------------------------------ voice
     def toggle_speak(self) -> None:
-        if not audio.tts_available():
-            self.toast("No speech output on this device", "warn")
-            return
         self.speak_on = not self.speak_on
-        self.prefs["speak"] = self.speak_on
-        self._save_prefs()
-        self._refresh_chips()
-        self.toast("Spoken replies " + ("on" if self.speak_on else "off"),
-                   "ok" if self.speak_on else "info")
+        self._ids().btn_speak.text = "SPEAK: ON" if self.speak_on else "SPEAK: OFF"
+        if self.speak_on and not audio.tts_available():
+            self._set_status("TTS not available on this device")
+            self.speak_on = False
+            self._ids().btn_speak.text = "SPEAK: OFF"
 
-    def stop_mic(self) -> None:
-        """Stop listening (also used by the Android back button / on_pause)."""
-        if not self.mic_active:
-            return
-        audio.stop_listening()
-        self.mic_active = False
-        self._ids().btn_mic.listening = False
-        self._refresh_chips()
-        self._status("mic stopped")
-
+    # ------------------------------------------------------------------ mic
     def toggle_mic(self) -> None:
+        ids = self._ids()
         if self.mic_active:
-            self.stop_mic()
+            audio.stop_listening()
+            self.mic_active = False
+            self.sonic_state = "idle"
+            self.sonic_level = 0.0
+            ids.btn_mic.text = "🎤 MIC"
+            self._set_status("● mic stopped")
             return
-        if self.mic_unavailable:
-            self.toast("No speech service — typing works the same", "warn")
-            return
-        if audio.start_listening(self._on_speech):
+        if audio.start_listening(
+            self._on_speech,
+            on_partial=self._on_partial_speech,
+            on_rms=self._on_rms,
+        ):
             self.mic_active = True
-            self._ids().btn_mic.listening = True
-            self._refresh_chips()
-            self._status("listening — speak now")
-            self.toast("Listening…", "info")
+            self.sonic_state = "listening"
+            ids.btn_mic.text = "⏹ STOP"
+            self._set_status("🎙 listening… speak now")
         else:
-            self.mic_unavailable = True
-            self.toast("Microphone unavailable — use text", "error")
+            self._set_status("● speech unavailable — use text or chips")
 
-    def _on_speech(self, text, err) -> None:
+    def _on_partial_speech(self, partial: str) -> None:
+        Clock.schedule_once(
+            lambda dt: setattr(self._ids().preview_label, "text", f"🎙 Hearing: \"{partial}\""),
+            0.02,
+        )
+
+    def _on_rms(self, rms: float) -> None:
+        norm = max(0.0, min(1.0, (rms + 2.0) / 12.0))
+        self.sonic_level = norm
+
+    def _on_speech(self, text: str | None, err: str | None) -> None:
         # pyjnius callbacks arrive on the Android thread — hop to Kivy's thread
-        Clock.schedule_once(lambda _dt: self._handle_speech(text, err), 0)
+        Clock.schedule_once(lambda dt: self._handle_speech(text, err), 0.04)
 
-    def _handle_speech(self, text, err) -> None:
+    def _handle_speech(self, text: str | None, err: str | None) -> None:
         self.mic_active = False
-        self._ids().btn_mic.listening = False
-        self._refresh_chips()
+        self.sonic_state = "idle"
+        self.sonic_level = 0.0
+        self._ids().btn_mic.text = "🎤 MIC"
         if text:
-            self._add_bubble("You (voice)", text, "you")
-            Clock.schedule_once(lambda _dt: self.run_command(text, who="You (voice)"), T.D_FAST)
+            self._set_status(f"🎙 heard: {text}")
+            self._add("You (voice)", text, "you")
+            Clock.schedule_once(lambda dt: self._run(text), 0.04)
         else:
-            self._status(f"speech: {err or 'no result'}")
-            self.toast("Didn't catch that — try again", "warn")
-
-    # ---------------------------------------------------------------- prefs
-    def _prefs_path(self) -> Path:
-        return Path(self.working_root) / PREFS_FILE
-
-    def _load_prefs(self) -> dict:
-        try:
-            return json.loads(self._prefs_path().read_text())
-        except Exception:
-            return {}
-
-    def _save_prefs(self) -> None:
-        try:
-            self._prefs_path().write_text(json.dumps(self.prefs))
-        except OSError:
-            pass
-
-    # -------------------------------------------------------------- lifecycle
-    def _on_key(self, _window, key, *_a):
-        if key == 27 and self.mic_active:   # Android back button / Esc
-            self.stop_mic()
-            return True
-        return False
-
-    def on_pause(self) -> bool:
-        self.stop_mic()
-        return True
-
-    def on_resume(self):
-        self._refresh_chips()
+            self._set_status(f"● speech: {err or 'no result'}")

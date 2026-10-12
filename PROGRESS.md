@@ -10,11 +10,16 @@ with an optional small offline LLM for free-form phrasing.
 Desktop build = tkinter UI (steps 1–50). Android build = Kivy UI reusing the same
 pure-Python core (steps 51–60).
 
-**Last update:** 2026-10-12 — Phase 9 (headless CLI + CI) and Phase 10 (UI/UX
-overhaul on desktop **and** Android) complete; Android port merged to main via PR #2
-**Current position:** STEP 76 / 100 — v0.2.0: scriptable CLI, animated UI, shared design tokens
-**Resume rule:** do the first unchecked step (there is one: Phase 11 below); do not skip ahead; commit + push after each phase.
+**Last update:** 2026-10-12 — Phases 9–12 merged to `main` (minimalistic animated
+Desktop + Android UI, live workspace inspector, intent preview, sonic visualizer,
+headless CLI, cross-OS CI) and **Phase 13** added on top: merge reconciliation,
+installer/CI hardening, deterministic UI preview.
 
+**Current position:** STEP 13.6 of Phase 13 — see “Phase 13” below for the only
+open checkboxes. Phases 1–12 are complete.
+
+**Resume rule:** do the first unchecked step; do not skip ahead; commit + push
+after each phase.
 Legend: ⬜ not started · 🚧 in progress · ✅ done
 
 ---
@@ -106,74 +111,97 @@ Legend: ⬜ not started · 🚧 in progress · ✅ done
 - [x] 59. `android/README.md` — how to get the APK (Actions or local buildozer), capability matrix, limits
 - [x] 60. Core suite still green (45/45), committed + pushed, PR #2 opened for `main`
 
-## Phase 9 — Headless CLI, tooling & CI (steps 61–66)
+## Phase 9 — Finish & Fix Previous Work (steps 61–65)
 
-- [x] 61. `thans/cli.py` — engine-driven headless runner (imports no tkinter): run one/many commands, JSON output, quiet mode, interactive `--cli` prompt
-- [x] 62. Output contract: results → stdout, problems → stderr (`THANS: …`), exit code 0/1, "keep going after a failure" semantics
-- [x] 63. `__main__` flags: `--run/-c` (repeatable), `--cli`, `--json`, `--quiet`, `--llm/--no-llm`, `--version`; headless modes never write the saved config
-- [x] 64. `tests/test_cli.py` — in-process + real-subprocess coverage of argv, streams, exit codes, safety, recursion guard for `--selftest`
-- [x] 65. `.github/workflows/tests.yml` — suite on Linux/Windows/macOS × py3.11/3.12 + CLI smoke tests + exit-code contract + UI-preview render job
-- [x] 66. APK workflow hardened: pinned `cython<3` (p4a requirement), cached Android SDK/NDK, layout validation runs before the build
+- [x] 61. Fix Desktop `ThansApp` window-close protocol (`self.root.protocol`) & `cd ..` / `go back` / `undo` for `organize`
+- [x] 62. Fix Android Kivy runtime API calls (`Builder.load_file`, `BoxLayout.add_widget`, `ScrollView.scroll_y`, wrapped label sizing, `canvas.before` backgrounds)
+- [x] 63. Add Android 6+ runtime `RECORD_AUDIO` permission request, friendly error mapping, and live partial/RMS speech callbacks in `thans_android/audio.py` & `thans/stt.py`
+- [x] 64. Fix `.github/workflows/build-apk.yml` and `android/buildozer.spec` (`virtualenv`, `cython<3`, C/JNI system headers, buildozer cache) so APK CI builds cleanly
+- [x] 65. Update `PROGRESS.md` for merged PR #2 and Phase 9 completion
 
-## Phase 10 — UI/UX overhaul (steps 67–76)
+## Phase 10 — Shared UX Intelligence & Animation Engine (steps 66–70)
 
-- [x] 67. `thans/ui/theme.py` — one palette + radii + durations + type scale + glyph sets; colour maths (`mix`, `ramp`, `plain`) unit-tested
-- [x] 68. `thans/ui/logic.py` — pure animation engine (Tween/Animator/LoopTween, easings, typewriter, suggestions, health, greetings) — no tkinter, fully tested
-- [x] 69. `thans/ui/widgets.py` — canvas-drawn kit: rounded `Card`, `RoundedButton`/`IconButton`, `Chip`, `Switch`, gradient `ProgressBar`, `Dots`, `Waveform`, `Toaster`, `SlidePanel`, `Tooltip`, `Burst`
-- [x] 70. `thans/ui/chat.py` — transcript with streaming (typed-out) replies, message bubbles, slim fading scrollbar, right-click actions, animated `EmptyState` hero
-- [x] 71. `thans/ui/panels.py` — boot overlay (real init steps), dashboard cards (files/folders/size/free space with count-up), quick actions, voice card, tappable `HelpPanel`, live-progress `SettingsPanel`
-- [x] 72. `thans/app.py` rewritten: single 60 fps loop, responsive dashboard column, keyboard shortcuts, suggestions, toasts, confetti, geometry + settings persistence, first-run tour
-- [x] 73. `tests/faketk.py` + `tests/test_ui_app.py` — 59 headless UI tests that drive the real window (boot, commands, streaming, settings, voice wiring, widgets)
-- [x] 74. Android UI rebuilt on the same tokens: `android/thans.kv` (boot splash, chips, bubbles, pills, composer, hero), `widgets.py`, `theme.py` derived from the desktop palette, icon + presplash
-- [x] 75. `tests/fakekivy.py` + `tests/test_android_app.py` — static KV↔code validation + 36 behavioural tests (boot, bubbles, toasts, mic, speech, prefs) with no GL/display
-- [x] 76. `scripts/render_ui_preview.py` → `docs/ui-preview.png` (rendered from the real tokens); README/PROGRESS/android docs updated; installer branding (`.ico`, `.desktop` icon, wizard icon)
+- [x] 66. `thans/ui_helpers.py` — real-time intent preview (`preview_intent`), smart command & filename autocomplete (`autocomplete`), quick-action chip catalog
+- [x] 67. `thans/ui_helpers.py` — live directory snapshot (`dir_snapshot`), diff tracking for visual highlight animations, smart file-type icons, human-readable sizes, breadcrumb path segments, and `.thans_trash` counter
+- [x] 68. `thans/animations.py` — color interpolation (`lerp_hex`, `lerp_rgba`), cubic/sine easing curves, 60fps multi-wave sonic orb/waveform geometry generator (`compute_wave_points`), streaming text chunker, and pulse decay math
+- [x] 69. Extend `thans/config.py` with UI/UX preferences (`theme`: dark/light, `animations`: on/off, `sidebar`: open/closed)
+- [x] 70. Unit tests (`tests/test_ui_helpers.py`) covering intent preview, autocomplete, snapshots/diffs, breadcrumbs, and animation math
 
----
+## Phase 11 — Impressive Minimalistic Desktop UI/UX (Windows & Linux) (steps 71–78)
 
-## Changelog
+- [x] 71. Minimalistic design system (`thans/app.py`) with Dark & Light themes, smooth theme cross-fade transition, and refined typography
+- [x] 72. Animated **Sonic Visualizer Canvas** in header (60fps multi-ribbon sine waves + glowing orb reacting to Idle, Listening, Thinking, Speaking, and Success/Error states)
+- [x] 73. Interactive **Breadcrumb Bar** (`🏠 root › folder › subfolder`) + **Trash Badge (`♻️ N`)** + one-click **Undo (`↩`)** & **Theme Toggle (`🌙/☀️`)**
+- [x] 74. Collapsible **Live File Workspace Sidebar** with instant filter box, smart file icons, file sizes, double-click to navigate/open, single-click context action bar (`Open`, `Rename`, `Move`, `Trash`), and **animated emerald highlight pulses** on newly created/modified items
+- [x] 75. **Live Intent Preview Bar** & clickable **Quick-Action Chips** above the input bar (real-time parsed action badge as you type + `Tab` autocomplete for commands & filenames)
+- [x] 76. **Animated Chat Stream** with role badges, command pills, smooth streaming text reveal, and slide-in toast notifications
+- [x] 77. Keyboard shortcuts (`Ctrl+K` / `/` focus command bar, `Tab` autocomplete, `Ctrl+Z` undo, `Ctrl+L` clear chat, `Ctrl+B` toggle sidebar, `F2` mic toggle) & modernized Settings modal
+- [x] 78. Headless Desktop UI test suite (`tests/test_desktop_ui.py`) validating widget creation, animations, sidebar interactions, theme transitions, and command flow
 
-| Date | Step(s) | Note |
-|------|---------|------|
-| 2026-10-12 | — | Plan created (50 steps). Build starting. |
-| 2026-10-12 | 1–6 | Phase 0 committed: skeleton, requirements, pyproject, .gitignore, README. |
-| 2026-10-12 | 7–10 | Phase 1: config, model_manager, models/README, download_models.py. |
-| 2026-10-12 | 12–25 | Phase 2: rule parser — all 13 intent families, fuzzy names, fillers. |
-| 2026-10-12 | 26–32 | Phase 3: actions + engine (root confinement, trash, undo). 45/45 tests pass. |
-| 2026-10-12 | 33–40 | Phase 4: tkinter GUI (chat, chips, mic, settings, threaded worker). |
-| 2026-10-12 | 41–44 | Phase 5: Vosk STT + pyttsx3 TTS + voice loop wiring. |
-| 2026-10-12 | 45–47 | Phase 6: optional llama.cpp LLM parser + whitelist validation + fallback chain. |
-| 2026-10-12 | 48–50 | Phase 7: PyInstaller build script, Windows (Inno Setup) + Linux installers. Full suite green. |
-| 2026-10-12 | 51 | Desktop build merged to `main` (PR #1) — now visible in the repo. |
-| 2026-10-12 | 52–60 | Phase 8: Android (Kivy) port reusing the core; headless-validated; CI builds the APK artifact. PR #2 opened. |
-| 2026-10-12 | 61–66 | Phase 9 (v0.2.0): headless CLI (`--run`/`--cli`/`--json`), stdout/stderr + exit-code contract, cross-OS CI, APK workflow hardened. |
-| 2026-10-12 | 67–76 | Phase 10: UI/UX overhaul — shared design tokens, animated desktop window, Kivy UI rebuilt to match, 95 new headless UI tests, preview renderer, installer branding. |
+## Phase 12 — Impressive Minimalistic Android APK UI/UX (steps 79–85)
 
-## Phase 11 — Next (steps 77–100, not started)
+- [x] 79. Modern minimalistic Kivy layout (`android/thans.kv`) with rounded card surfaces (`RoundedRectangle`), elevation, dark/light theme support, and responsive `dp`/`sp` scaling
+- [x] 80. Animated **Sonic Wave & Status Header** with interactive **Breadcrumb Path Bar** (`⬆ Up` + current folder pill) and **Trash/Undo** quick action
+- [x] 81. Touch-intuitive **Segmented View (`💬 Assistant` | `📁 Files`)** so mobile users can both chat and visually browse/tap folders & files offline
+- [x] 82. **Live Intent Preview Pill** + horizontal scrollable **Quick-Action Chips** (`📁 List`, `➕ Folder`, `📝 File`, `✨ Organize`, `🔍 Find`, `⚡ Complete`, `↩ Undo`, `❓ Help`) for effortless thumb-driven UX
+- [x] 83. Smooth Kivy widget animations (`kivy.animation.Animation` for card fade/slide-in, button press feedback, sonic wave bars, and file change highlights)
+- [x] 84. Headless Android Kivy test suite (`tests/test_android_ui.py`) validating real KV parsing, widget tree build, view switching, animations, live preview, and end-to-end command sessions
+- [x] 85. Final documentation polish (`README.md`, `android/README.md`, `PROGRESS.md`), full test run (68/68), commit & push
 
-- [ ] 77. Undo **history**: keep an undo stack (not just the last action) and show it in the dashboard
-- [ ] 78. Folder **watch** (inotify/FSEvents polling) with a live "what changed" digest in the transcript
-- [ ] 79. Batch **rename** (pattern → `photo_001.jpg`) exposed as `rename all .jpg in pics to …`
-- [ ] 80. Zip / unzip commands (`zip reports`, `unzip archive.zip`) with progress
-- [ ] 81. Desktop **tray icon** + global hotkey to summon the window and start listening
-- [ ] 82. Duplicate-file finder (`find duplicates in downloads`) with a safe, trashed cleanup
-- [ ] 83. Storage report card (largest folders, oldest files) under the dashboard
-- [ ] 84. Android: SAF/`MANAGE_EXTERNAL_STORAGE` opt-in so the phone can manage real shared folders
-- [ ] 85. Android: floating bubble (overlay) shortcut for voice commands from any app
-- [ ] 86. i18n of the parser + UI strings (start with Spanish, Hindi, Tamil)
-- [ ] 87. Voice wake word ("hey thans") via a tiny offline keyword spotter
-- [ ] 88. Undo of `organize` (record every move so a whole tidy-up can be reversed)
-- [ ] 89. Command palettes/presets: user-defined shortcuts ("tidy my desktop")
-- [ ] 90. Plugin API: drop a Python file in `~/.thans/plugins/` to add an action
-- [ ] 91. Optional encrypted trash + "shred" (secure overwrite) command
-- [ ] 92. Export the transcript (txt/md) and copy a command as a shell one-liner
-- [ ] 93. Accessibility pass: screen-reader labels, high-contrast theme, 200% scaling
-- [ ] 94. Light theme alongside the dark one (tokens already centralised)
-- [ ] 95. Telemetry-free crash report file (`~/.thans/last_error.log`) with one-click copy
-- [ ] 96. Benchmarks: parser throughput + action latency in CI (fail on regression)
-- [ ] 97. Packaged `.dmg` / Flatpak / MSIX builds
-- [ ] 98. Model manager UI: switch STT/LLM models, verify checksums, delete models
-- [ ] 99. Watch-folder automations ("when a PDF lands in scans, move it to docs")
-- [ ] 100. 1.0 polish: onboarding tour, release page, signed installers
+## Phase 13 — Merge reconciliation, tooling & CI (steps 13.1–13.6)
+
+A second session implemented the Phase 9–12 UI overhaul straight on `main`
+(PRs #2/#4). This phase merges that work with the CLI/CI/test-infrastructure of
+this branch, removes the duplicate UI stack, and closes the gaps that neither
+side had covered.
+
+- [x] 13.1 Merge `main` (Phases 9–12) into the branch: adopt `thans/animations.py`,
+  `thans/ui_helpers.py`, one `ThansApp`, one `thans.kv`; delete the parallel
+  `thans/ui/` stack plus the old Kivy `theme.py`/`widgets.py` and their doubles
+- [x] 13.2 Playwright-free **UI preview renderer**: `scripts/render_ui_preview.py`
+  draws the desktop window + phone screen from the real theme tokens
+  (`thans/animations.py`) → `docs/ui-preview.png` (README screenshot cannot drift)
+- [x] 13.3 App **icon set** from the accent ramp: `installer/thans.ico` (Windows
+  exe + Inno Setup wizard), `installer/linux/thans.png` (+ `.desktop` Icon=),
+  `android/thans_android/assets/icon.png` + `presplash.png`, wired into
+  `buildozer.spec` and `scripts/build_installer.py`
+- [x] 13.4 `thans/cli.py` headless runner + `.github/workflows/tests.yml` matrix
+  (Linux/Windows/macOS × py3.11/3.12, CLI smoke test, exit-code contract)
+- [x] 13.5 Android UI **test double** (`tests/fakekivy.py`) that runs the real
+  animation loop on a virtual clock — kept and wired into the APK workflow so a
+  broken layout fails the build instead of the phone
+- [x] 13.6 Docs: README (design system, headless mode, icon, preview), PROGRESS,
+  android/README; installer branding
+- [x] 13.7 Reconcile the docs and the two test suites after the merge, then
+  re-run everything (`python -m thans --selftest`) and push
+- [x] 13.10 **Natural-language polish** (found while smoke-testing the new CLI):
+  a bare `.` / “here” / “this folder” now means the current folder, `count …` and
+  `number of …` are count aliases, `find invoice in docs` searches that folder,
+  and `list files in` no longer swallows “in” as a path. Covered by 8 new tests.
+- [x] 13.11 The merged UI preview is rendered from `animations.THEMES`,
+  `compute_sonic_waves`, `ui_helpers.QUICK_CHIPS`/`preview_intent` — desktop in
+  dark plus both phone tabs (chat dark, files **light**), so both themes ship
+  visual proof. CI re-renders it as an artifact on every run.
+- [ ] 13.8 Watch the CI run for this branch and fix whatever it reports
+- [ ] 13.9 Ship v0.2.0 release notes + tag once `main` is green
+
+## Roadmap (steps 86–100, not started)
+
+- [ ] 86. Undo **history** stack (not just the last action), shown in the dashboard
+- [ ] 87. Folder **watch** digest (new/changed files streamed into the transcript)
+- [ ] 88. Batch rename (`rename all .jpg in pics to photo_###`)
+- [ ] 89. Zip / unzip commands with progress
+- [ ] 90. Desktop tray icon + global hotkey to summon the window and listen
+- [ ] 91. Duplicate-file finder with trashed cleanup
+- [ ] 92. Android SAF / `MANAGE_EXTERNAL_STORAGE` opt-in for real shared folders
+- [ ] 93. Android floating-bubble voice shortcut
+- [ ] 94. i18n of parser + UI strings (Tamil, Hindi, Spanish first)
+- [ ] 95. Offline wake word (“hey thans”)
+- [ ] 96. User-defined command presets
+- [ ] 97. Plugin API (`~/.thans/plugins/`)
+- [ ] 98. Accessibility pass (screen readers, high contrast, 200 % scaling)
+- [ ] 99. Packaged `.dmg` / Flatpak / MSIX
+- [ ] 100. 1.0 polish: signed installers + release page
 
 ## Known decisions (so future sessions don't re-litigate)
 
@@ -183,8 +211,8 @@ Legend: ⬜ not started · 🚧 in progress · ✅ done
 - **LLM (optional):** `llama-cpp-python` + GGUF in `models/`. Default **Qwen2.5-0.5B-Instruct Q4_K_M (≈ 408 MB)** — best tiny model for strict-JSON command extraction. App works 100 % without it (rule parser covers all documented commands).
 - **Safety:** all ops confined to one working root; deletes go to trash by default; single-level undo; config in `~/.thans/config.json`.
 - **Python ≥ 3.10.** Tests run via `python -m unittest` (no pytest dependency).
-- **Design system:** one palette/type/motion source in `thans/ui/theme.py`; Android derives from it. Animations are switchable (`motion` setting) and every widget is canvas-drawn (no image assets, works on any tkinter).
-- **Two test doubles, no display needed:** `tests/faketk.py` (tkinter) and `tests/fakekivy.py` (Kivy) let the UI suites run in CI/containers; they validate option names, ids and the real animation loop rather than mocking behaviour away.
+- **Design system (single source):** themes, easings and geometry live in `thans/animations.py`; breadcrumbs/dir snapshots/intent preview/autocomplete live in `thans/ui_helpers.py`. Both are GUI-free, so the Android app imports the same modules and the desktop ↔ phone look cannot drift. Light + dark themes, animations switchable via the `animations` config key.
 - **Headless-first engine:** `thans/cli.py` never imports tkinter, so servers and cron jobs can drive the same safe engine; `--json` + exit codes are the stable scripting interface.
-- **Glyph policy:** emoji on Windows/macOS, DejaVu-safe geometric symbols elsewhere; `theme.plain()` downgrades pictographs before they hit a monospace surface (no tofu boxes on Linux).
+- **Two test doubles, no display needed:** `tests/test_desktop_ui.py` (fake tkinter) and `tests/test_android_ui.py` (fake Kivy) exercise the real widgets/animations rather than mocking behaviour away, so both UIs are covered in CI on the three OSes.
+- **Glyph policy:** emoji in headings/labels (Windows & macOS have full coverage), geometric fallbacks where a console font may lack emoji.
 - **Android:** Kivy UI reuses the same pure-Python `thans` core (staged in at build time). Vosk/sounddevice/pyttsx3/llama are desktop-only (no Android builds); the phone uses Android's own `SpeechRecognizer`/`TextToSpeech` via pyjnius, so voice is best-effort (offline only with an on-device offline voice pack) and the LLM is off. Text commands are the guaranteed-fully-offline path on Android. Working root = the app's private storage dir (P4A cwd) — the only storage Android allows without broad permissions. APK is produced by the GitHub Actions workflow (`thans-android` artifact) or a local `buildozer android debug`.

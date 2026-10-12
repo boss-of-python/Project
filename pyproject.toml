@@ -26,4 +26,4 @@ build = ["pyinstaller>=6.3"]
 thans = "thans.__main__:main"
 
 [tool.setuptools]
-packages = ["thans", "thans.actions", "thans.ui"]
+packages = ["thans", "thans.actions"]

@@ -5,7 +5,7 @@ import os
 import re
 from pathlib import Path
 
-from .common import rel
+from .common import find_item, rel
 
 KNOWN_EXTS = {
     "pdf", "txt", "md", "rtf", "odt", "epub",
@@ -20,8 +20,8 @@ KNOWN_EXTS = {
 }
 
 
-def find(root: Path, current: Path, query: str, limit: int = 40):
-    """Search under ``current`` (the working folder).
+def find(root: Path, current: Path, query: str, limit: int = 40, where: str | None = None):
+    """Search under ``current`` (or the ``where`` sub-folder, e.g. "in docs").
 
     ``query`` forms:
       * ``invoice``       → name substring
@@ -42,6 +42,13 @@ def find(root: Path, current: Path, query: str, limit: int = 40):
             ext = q
 
     base = current
+    if where:
+        try:
+            base = find_item(current, where)
+        except (OSError, ValueError):
+            base = current
+        if not base.is_dir():
+            base = current
     hits: list[Path] = []
     for dirpath, dirnames, filenames in os.walk(base):
         dp = Path(dirpath)

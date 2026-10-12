@@ -18,6 +18,43 @@ def expect(phrase, action, **params):
     return cmd
 
 
+class TestNaturalPhrasing(unittest.TestCase):
+    """Phrasings people actually type — "here", ".", "count …", "find … in …"."""
+
+    def test_here_words_mean_the_current_folder(self):
+        for phrase in ("how many files in .", "how many files in here",
+                       "number of folders here", "list this folder",
+                       "what's in here", "list files in ."):
+            cmd = parse(phrase)
+            self.assertIsNotNone(cmd, phrase)
+            self.assertEqual(cmd["action"], "list", phrase)
+            self.assertFalse(cmd["params"].get("path"), phrase)
+
+    def test_count_phrasings(self):
+        for phrase in ("how many files", "count files", "number of items",
+                       "count of files", "how many folders in docs"):
+            cmd = parse(phrase)
+            self.assertIsNotNone(cmd, phrase)
+            self.assertEqual(cmd["action"], "list")
+            self.assertTrue(cmd["params"].get("count"), phrase)
+        self.assertEqual(parse("count files in docs")["params"]["path"], "docs")
+        self.assertEqual(parse("how many items are in work")["params"]["path"], "work")
+
+    def test_search_in_a_folder(self):
+        cmd = parse("find invoice in docs")
+        self.assertEqual(cmd, {"action": "search", "params": {"query": "invoice", "path": "docs"}})
+        cmd = parse("search for pdf files in downloads")
+        self.assertEqual(cmd["params"], {"query": "pdf files", "path": "downloads"})
+        cmd = parse("find *.log in .")
+        self.assertEqual(cmd["params"], {"query": "*.log", "path": ""})
+        # a plain search still works
+        self.assertEqual(parse("find invoice")["params"], {"query": "invoice"})
+
+    def test_dots_in_file_names_survive_normalization(self):
+        self.assertEqual(parse("delete report.pdf")["params"]["path"], "report.pdf")
+        self.assertEqual(parse("open notes (1).txt")["params"]["path"], "notes (1).txt")
+
+
 class TestParser(unittest.TestCase):
     def test_help(self):
         expect("help", "help")

@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 APP_NAME = "THANS"
-APP_VERSION = "0.2.0"
+APP_VERSION = "0.1.0"
 
 #: Name of the hidden trash folder created inside the working root.
 TRASH_DIRNAME = ".thans_trash"
@@ -30,9 +30,9 @@ DEFAULTS: dict[str, Any] = {
     "use_llm": False,                # optional offline LLM parser
     "llm_model": DEFAULT_LLM_MODEL,  # GGUF filename inside models/
     "permanent_delete": False,       # if True, 'delete' skips the trash
-    "motion": True,                  # UI animations (off = instant, flat UI)
-    "window": "",                    # last window geometry, restored on start
-    "onboarded": False,              # one-time first-run tour, then never again
+    "theme": "dark",                 # "dark" | "light"
+    "animations": True,              # 60fps sonic wave & smooth UI transitions
+    "sidebar": True,                 # live file workspace inspector open
 }
 
 
