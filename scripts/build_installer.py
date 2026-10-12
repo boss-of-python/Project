@@ -19,19 +19,35 @@ ROOT = Path(__file__).resolve().parent.parent
 
 def main() -> int:
     onedir = "--onedir" in sys.argv
-    # entry point is thans/__main__.py; the package is found via --paths
-    args = [sys.executable, "-m", "PyInstaller",
-            "--noconfirm", "--clean", "--windowed",
-            "--name", "THANS",
-            "--paths", str(ROOT),
-            "--hidden-import", "thans.animations",
-            "--hidden-import", "thans.ui_helpers",
-            "thans/__main__.py"]
-    if onedir:
-        args.insert(1, "--onedir")
     icon = ROOT / "installer" / "thans.ico"
+    args = [
+        sys.executable, "-m", "PyInstaller",
+        "--noconfirm", "--clean", "--windowed",
+        "--name", "THANS",
+        "--paths", str(ROOT),
+        "--hidden-import", "thans",
+        "--hidden-import", "thans.actions",
+        "--hidden-import", "thans.actions.common",
+        "--hidden-import", "thans.actions.files",
+        "--hidden-import", "thans.actions.organize",
+        "--hidden-import", "thans.actions.opener",
+        "--hidden-import", "thans.actions.search",
+        "--hidden-import", "thans.animations",
+        "--hidden-import", "thans.ui_helpers",
+        "--hidden-import", "thans.cli",
+        "--hidden-import", "thans.engine",
+        "--hidden-import", "thans.parser_rules",
+        "--hidden-import", "vosk",
+        "--hidden-import", "sounddevice",
+        "--hidden-import", "numpy",
+        "--collect-submodules", "pyttsx3",
+        "--collect-all", "vosk",
+        str(ROOT / "thans" / "__main__.py"),
+    ]
+    if onedir:
+        args.append("--onedir")
     if icon.exists():
-        args[1:1] = ["--icon", str(icon)]
+        args.extend(["--icon", str(icon)])
 
     print("Building THANS with PyInstaller…")
     print("$ " + " ".join(args))
@@ -40,6 +56,8 @@ def main() -> int:
         print("PyInstaller failed.")
         return code
     exe = ROOT / "dist" / ("THANS" if sys.platform != "win32" else "THANS.exe")
+    if onedir:
+        exe = ROOT / "dist" / "THANS" / ("THANS.exe" if sys.platform == "win32" else "THANS")
     if exe.exists():
         size_mb = exe.stat().st_size / 1048576
         print(f"\n✓ Built: {exe}  ({size_mb:.1f} MB)")

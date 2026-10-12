@@ -6,7 +6,7 @@ else and never needs the internet once these files exist.
 | File / folder | Used for | Size | Required? |
 |---------------|----------|------|-----------|
 | `vosk-model-small-en-us-0.15/` | Speech recognition (voice commands) | ≈ 40 MB | for voice input |
-| `Qwen2.5-0.5B-Instruct-Q4_K_M.gguf` | Optional tiny LLM (free-form commands) | ≈ 408 MB | optional (off by default) |
+| `qwen2.5-0.5b-instruct-q4_k_m.gguf` | Optional tiny LLM (free-form commands) | ≈ 408 MB | optional (off by default) |
 
 ## Get the models
 

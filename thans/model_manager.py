@@ -10,17 +10,51 @@ from pathlib import Path
 from . import config
 
 
+def vosk_model_ready(p: Path) -> bool:
+    """True if ``p`` looks like a usable Vosk model directory.
+
+    The official small EN-US zip ships ``am/final.mdl`` (not ``model.bin``).
+    Accept any of the layouts Vosk itself will load.
+    """
+    if not p.is_dir():
+        return False
+    return any(
+        (p / marker).exists()
+        for marker in (
+            "am/final.mdl",
+            "am/final.mat",
+            "conf/model.conf",
+            "model.bin",
+            "ivector/final.ie",
+        )
+    )
+
+
 def vosk_model_dir() -> Path | None:
     """Return the Vosk STT model dir if installed, else None."""
     p = config.models_dir() / config.VOSK_MODEL_NAME
-    return p if (p / "model.bin").exists() else None
+    return p if vosk_model_ready(p) else None
 
 
 def llm_model_path(cfg: dict | None = None) -> Path | None:
-    """Return the configured GGUF LLM file if it exists, else None."""
+    """Return the configured GGUF LLM file if it exists, else None.
+
+    Filename matching is case-insensitive so a mixed-case README name and the
+    lowercase Hugging Face filename both resolve.
+    """
     name = (cfg or {}).get("llm_model") or config.DEFAULT_LLM_MODEL
-    p = config.models_dir() / name
-    return p if p.is_file() else None
+    d = config.models_dir()
+    direct = d / name
+    if direct.is_file():
+        return direct
+    wanted = Path(name).name.casefold()
+    try:
+        for p in d.glob("*.gguf"):
+            if p.name.casefold() == wanted:
+                return p
+    except OSError:
+        pass
+    return None
 
 
 def all_gguf() -> list[Path]:

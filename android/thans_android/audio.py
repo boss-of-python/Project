@@ -85,7 +85,14 @@ def speak(text: str) -> None:
     try:
         t = re.sub(r"[#*`>|_]+", " ", text or "")
         t = re.sub(r"\s+", " ", t).strip()[:300]
-        if t:
+        if not t:
+            return
+        # API 21+ speak(CharSequence, queueMode, Bundle, utteranceId)
+        try:
+            from jnius import autoclass
+            Bundle = autoclass("android.os.Bundle")
+            _tts.speak(t, 0, Bundle(), "thans-utterance")
+        except Exception:
             _tts.speak(t, 0, None)
     except Exception:
         pass
@@ -97,61 +104,92 @@ def _make_listener(
     on_partial: Optional[Callable[[str], None]] = None,
     on_rms: Optional[Callable[[float], None]] = None,
 ):
-    """Python implementation of android.speech.RecognitionListener (jnius)."""
-    from jnius import JavaClass, autoclass
+    """Python implementation of android.speech.RecognitionListener (jnius).
 
-    autoclass("android.speech.RecognitionListener")
+    Must be a ``PythonJavaClass`` (not ``JavaClass``) so pyjnius actually
+    implements the Java interface. Every RecognitionListener method is
+    declared — missing ones crash the recognizer on some Android versions.
+    """
+    from jnius import PythonJavaClass, java_method
 
-    class L(JavaClass):  # noqa: N801 - jnius requires Java-style names
-        __javainterfaces__ = ["android.speech.RecognitionListener"]
+    class Listener(PythonJavaClass):
+        __javainterfaces__ = ["android/speech/RecognitionListener"]
+        __javacontext__ = "app"
 
+        def __init__(self):
+            super().__init__()
+            self._on_result = on_result
+            self._on_partial = on_partial
+            self._on_rms = on_rms
+
+        @java_method("()V")
         def onBeginningOfSpeech(self):
             pass
 
+        @java_method("([B)V")
         def onBufferReceived(self, buffer):
             pass
 
+        @java_method("()V")
         def onEndOfSpeech(self):
             pass
 
+        @java_method("(I)V")
         def onError(self, error):
-            code = int(error) if isinstance(error, (int, float)) else -1
+            try:
+                code = int(error)
+            except (TypeError, ValueError):
+                code = -1
             msg = SPEECH_ERRORS.get(code, f"error {error}")
-            on_result(None, msg)
+            self._on_result(None, msg)
 
+        @java_method("(ILandroid/os/Bundle;)V")
         def onEvent(self, event_type, params):
             pass
 
+        @java_method("(Landroid/os/Bundle;)V")
         def onPartialResults(self, bundle):
-            if on_partial is None:
+            if self._on_partial is None or bundle is None:
                 return
             try:
-                matches = bundle.getCharSequenceArrayList("android.speech.extra.RESULTS")
+                matches = bundle.getStringArrayList("android.speech.extra.RESULTS")
+                if matches is None:
+                    matches = bundle.getCharSequenceArrayList("android.speech.extra.RESULTS")
                 if matches is not None and matches.size() > 0:
                     partial = str(matches.get(0) or "").strip()
                     if partial:
-                        on_partial(partial)
+                        self._on_partial(partial)
             except Exception:
                 pass
 
+        @java_method("(Landroid/os/Bundle;)V")
+        def onReadyForSpeech(self, params):
+            pass
+
+        @java_method("(Landroid/os/Bundle;)V")
         def onResults(self, bundle):
             text = None
             try:
-                matches = bundle.getCharSequenceArrayList("android.speech.extra.RESULTS")
-                if matches is not None and matches.size() > 0:
-                    text = str(matches.get(0) or "").strip()
+                if bundle is not None:
+                    matches = bundle.getStringArrayList("android.speech.extra.RESULTS")
+                    if matches is None:
+                        matches = bundle.getCharSequenceArrayList("android.speech.extra.RESULTS")
+                    if matches is not None and matches.size() > 0:
+                        text = str(matches.get(0) or "").strip()
             except Exception:
                 text = None
-            on_result(text, None)
+            self._on_result(text, None)
 
+        @java_method("(F)V")
         def onRmsChanged(self, rms):
-            if on_rms is not None:
-                try:
-                    on_rms(float(rms))
-                except Exception:
-                    pass
+            if self._on_rms is None:
+                return
+            try:
+                self._on_rms(float(rms))
+            except Exception:
+                pass
 
-    return L()
+    return Listener()
 
 
 def start_listening(
@@ -178,10 +216,11 @@ def start_listening(
         _sr = SpeechRecognizer.createSpeechRecognizer(_context())
         _listener = _make_listener(on_result, on_partial=on_partial, on_rms=on_rms)
         _sr.setRecognitionListener(_listener)
-        intent = Intent("android.intent.action.RECOGNIZE_SPEECH")
+        intent = Intent("android.speech.action.RECOGNIZE_SPEECH")
         intent.putExtra("android.speech.extra.LANGUAGE_MODEL",
                         "android.speech.extra.LANGUAGE_MODEL_FREE_FORM")
         intent.putExtra("android.speech.extra.PARTIAL_RESULTS", True)
+        intent.putExtra("android.speech.extra.MAX_RESULTS", 3)
         _sr.startListening(intent)
         return True
     except Exception as e:  # noqa: BLE001
@@ -190,11 +229,19 @@ def start_listening(
 
 
 def stop_listening() -> None:
-    global _sr
+    global _sr, _listener
     if _sr is not None:
         try:
             _sr.stopListening()
+        except Exception:
+            pass
+        try:
+            _sr.cancel()
+        except Exception:
+            pass
+        try:
             _sr.destroy()
         except Exception:
             pass
         _sr = None
+    _listener = None

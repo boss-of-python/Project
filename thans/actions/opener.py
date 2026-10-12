@@ -10,7 +10,7 @@ from .common import find_item, rel
 
 
 def open_item(root: Path, current: Path, path: str, reveal: bool = False):
-    p = find_item(current, path)
+    p = find_item(current, path, root=root)
     system = platform.system()
     try:
         if system == "Windows":

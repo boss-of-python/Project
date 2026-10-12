@@ -44,7 +44,7 @@ def find(root: Path, current: Path, query: str, limit: int = 40, where: str | No
     base = current
     if where:
         try:
-            base = find_item(current, where)
+            base = find_item(current, where, root=root)
         except (OSError, ValueError):
             base = current
         if not base.is_dir():

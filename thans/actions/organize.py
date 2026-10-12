@@ -6,11 +6,11 @@ import shutil
 from datetime import datetime
 from pathlib import Path
 
-from .common import NotFoundError, find_item, rel, unique_dest
+from .common import NotFoundError, ensure_inside, find_item, rel, unique_dest
 
 
 def organize(root: Path, current: Path, path: str | None = None, mode: str = "extension"):
-    d = find_item(current, path) if path else current
+    d = find_item(current, path, root=root) if path else ensure_inside(root, current)
     if not d.is_dir():
         raise NotFoundError(f"'{path}' is not a folder.")
 

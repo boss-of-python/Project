@@ -3,11 +3,20 @@ name: Build Android APK
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, "arena/**"]
     paths:
       - "android/**"
       - "thans/**"
       - ".github/workflows/build-apk.yml"
+  pull_request:
+    paths:
+      - "android/**"
+      - "thans/**"
+      - ".github/workflows/build-apk.yml"
+
+concurrency:
+  group: apk-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   apk:
@@ -29,8 +38,10 @@ jobs:
       - name: Cache Buildozer global directory
         uses: actions/cache@v4
         with:
-          path: ~/.buildozer
-          key: buildozer-sdk-${{ runner.os }}-ubuntu2204-api33-v2
+          path: |
+            ~/.buildozer
+            android/.buildozer
+          key: buildozer-sdk-${{ runner.os }}-ubuntu2204-api33-ndk25b-v3
 
       - name: Install system deps + buildozer
         run: |
@@ -42,7 +53,7 @@ jobs:
             libffi-dev libssl-dev zlib1g-dev \
             libncurses-dev libncurses5-dev libncursesw5-dev libtinfo5 python3-pip
           python -m pip install --upgrade pip "setuptools<70" wheel virtualenv
-          python -m pip install "cython==0.29.36" buildozer
+          python -m pip install "cython==0.29.36" "buildozer==1.5.0"
 
       - name: Run core & UI test suite
         run: python -m thans --selftest
@@ -63,6 +74,7 @@ jobs:
           if-no-files-found: error
 
       - name: Auto-commit built APK to releases/THANS-android.apk
+        if: github.event_name != 'pull_request'
         run: |
           mkdir -p releases
           cp -f android/bin/*.apk releases/THANS-android.apk
@@ -73,6 +85,6 @@ jobs:
             echo "releases/THANS-android.apk is already up to date"
           else
             git commit -m "chore(android): commit built APK to releases/THANS-android.apk [skip ci]"
-            git pull --rebase --autostash origin "${GITHUB_REF_NAME:-main}"
+            git pull --rebase --autostash origin "${GITHUB_REF_NAME:-main}" || true
             git push origin "HEAD:${GITHUB_REF_NAME:-main}"
           fi

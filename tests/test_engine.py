@@ -270,6 +270,50 @@ class TestSafety(EngineTestBase):
         self.assertTrue(r.ok, r.message)
         self.assertIn("Nothing", r.message)
 
+    def test_parent_path_cannot_delete_outside_root(self):
+        secret = self.tmp.parent / "thans_secret_outside.txt"
+        secret.write_text("do-not-touch")
+        try:
+            r = self.say("delete ../thans_secret_outside.txt")
+            self.assertFalse(r.ok, r.message)
+            self.assertIn("outside the working root", r.message)
+            self.assertTrue(secret.exists())
+            self.assertEqual(secret.read_text(), "do-not-touch")
+        finally:
+            secret.unlink(missing_ok=True)
+
+    def test_absolute_delete_outside_is_blocked(self):
+        r = self.say("delete /etc/passwd")
+        self.assertFalse(r.ok)
+        self.assertIn("outside the working root", r.message)
+
+    def test_open_absolute_outside_is_blocked(self):
+        r = self.say("open /etc/passwd")
+        self.assertFalse(r.ok)
+        self.assertIn("outside the working root", r.message)
+
+    def test_symlink_pointing_outside_is_blocked(self):
+        outside = self.tmp.parent / "thans_symlink_target.txt"
+        outside.write_text("OUT")
+        link = self.tmp / "escape.txt"
+        try:
+            link.symlink_to(outside)
+        except OSError:
+            self.skipTest("symlinks not supported here")
+        try:
+            r = self.say("delete escape.txt")
+            self.assertFalse(r.ok, r.message)
+            self.assertIn("outside the working root", r.message)
+            self.assertTrue(outside.exists())
+            self.assertEqual(outside.read_text(), "OUT")
+        finally:
+            outside.unlink(missing_ok=True)
+
+    def test_relative_inside_root_still_works(self):
+        r = self.say("delete work/notes.txt")
+        self.assertTrue(r.ok, r.message)
+        self.assertFalse((self.tmp / "work" / "notes.txt").exists())
+
 
 class TestParserFallback(EngineTestBase):
     def test_unknown_phrase(self):
@@ -281,6 +325,33 @@ class TestParserFallback(EngineTestBase):
         r = self.say("create folder work/reports")
         self.assertTrue(r.command.startswith("mkdir"))
         self.assertEqual(r.source, "rules")
+
+
+class TestUniqueDestAndModels(unittest.TestCase):
+    def test_unique_dest_keeps_extension_and_starts_at_one(self):
+        tmp = Path(tempfile.mkdtemp(prefix="thans_unique_"))
+        try:
+            (tmp / "report.pdf").write_text("1")
+            d1 = actions.unique_dest(tmp, "report.pdf")
+            self.assertEqual(d1.name, "report (1).pdf")
+            d1.write_text("2")
+            d2 = actions.unique_dest(tmp, "report.pdf")
+            self.assertEqual(d2.name, "report (2).pdf")
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_vosk_ready_accepts_official_layout_not_just_model_bin(self):
+        from thans.model_manager import vosk_model_ready
+        tmp = Path(tempfile.mkdtemp(prefix="thans_vosk_"))
+        try:
+            fake = tmp / "vosk-model-small-en-us-0.15"
+            fake.mkdir()
+            self.assertFalse(vosk_model_ready(fake))
+            (fake / "am").mkdir()
+            (fake / "am" / "final.mdl").write_bytes(b"x")
+            self.assertTrue(vosk_model_ready(fake))
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
 
 
 if __name__ == "__main__":

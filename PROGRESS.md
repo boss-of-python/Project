@@ -10,18 +10,17 @@ with an optional small offline LLM for free-form phrasing.
 Desktop build = tkinter UI (steps 1–50). Android build = Kivy UI reusing the same
 pure-Python core (steps 51–60).
 
-**Last update:** 2026-10-12 — Phases 9–12 merged to `main` (minimalistic animated
-Desktop + Android UI, live workspace inspector, intent preview, sonic visualizer,
-headless CLI, cross-OS CI) and **Phase 13** added on top: merge reconciliation,
-installer/CI hardening, deterministic UI preview.
+**Last update:** 2026-10-12 — Phase 13.9 + deployment audit: path-confinement
+hardening, Vosk/LLM detection fixes, Android speech listener, APK CI, LICENSE
++ CHANGELOG. Ready for the v0.2.0 PR.
 
-**Current position:** STEP 13.8 of Phase 13 — see “Phase 13” below for the only
-open checkboxes. Phases 1–12 are complete.
+**Current position:** STEP 13.9 of Phase 13 in progress (release notes in
+`CHANGELOG.md`; tag after merge to `main`). Phases 1–12 are complete.
 
-**Resume rule:** the next unchecked step is **13.9** (release notes + tag); after
-that the roadmap below (86–100) is the plan. Commit + push after each phase.
+**Resume rule:** after 13.9 the roadmap below (86–100) is the plan. Commit +
+push after each phase.
 
-**Test suite:** `python -m thans --selftest` → **100 tests, all green**, no
+**Test suite:** `python -m thans --selftest` → **100+ tests, all green**, no
 display, models, tkinter or kivy required (the Kivy test skips itself when kivy
 is absent and uses the real Kivy parser when it is installed).
 Legend: ⬜ not started · 🚧 in progress · ✅ done
@@ -191,7 +190,12 @@ side had covered.
   console, and a redirected stream made subprocess output undecodable. Fixed in
   `thans/__init__.py:use_utf8_output()` (only switches streams that cannot
   encode our glyphs) and covered by 4 new tests + a cp1252 whole-suite run.
-- [ ] 13.9 Ship v0.2.0 release notes + tag once `main` is green
+- [x] 13.9 Ship v0.2.0 release notes (`CHANGELOG.md`, MIT `LICENSE`) — tag `v0.2.0` after merge to `main`
+- [x] 13.12 Deployment audit: root confinement for every action (block `../`,
+  absolute paths, outbound symlinks), Vosk `am/final.mdl` detection, GGUF
+  filename alignment, PyInstaller argv, Android `PythonJavaClass` speech
+  listener, unique_dest extensions, installer scripts fail on red tests,
+  APK workflow on `arena/**` + NDK 25b.
 
 ## Roadmap (steps 86–100, not started)
 
