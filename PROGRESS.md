@@ -8,8 +8,8 @@
 creates and organizes files & folders via **voice commands** and **text commands**,
 with an optional small offline LLM for free-form phrasing.
 
-**Last update:** 2026-10-12 — plan created, build starting (step 1)
-**Current position:** STEP 1 / 50
+**Last update:** 2026-10-12 — Phases 1–3 complete, 45/45 tests green
+**Current position:** STEP 33 / 50
 **Resume rule:** do the first unchecked step; do not skip ahead; commit after each phase.
 
 Legend: ⬜ not started · 🚧 in progress · ✅ done
@@ -18,47 +18,47 @@ Legend: ⬜ not started · 🚧 in progress · ✅ done
 
 ## Phase 0 — Project foundation (steps 1–6)
 
-- [ ] 1.  Create repository skeleton (`thans/`, `models/`, `scripts/`, `installer/`, `tests/`)
-- [ ] 2.  Create `PROGRESS.md` with the 50-step plan and status tracking
-- [ ] 3.  Create `requirements.txt` (runtime deps) + `requirements-llm.txt` (optional LLM) + `requirements-build.txt`
-- [ ] 4.  Create `pyproject.toml` (packaging metadata + `thans` entry point)
-- [ ] 5.  Create `.gitignore` (models, venv, build artifacts, pycache)
-- [ ] 6.  Write `README.md` (overview, quick start, command reference, model sizes, safety notes)
+- [x] 1.  Create repository skeleton (`thans/`, `models/`, `scripts/`, `installer/`, `tests/`)
+- [x] 2.  Create `PROGRESS.md` with the 50-step plan and status tracking
+- [x] 3.  Create `requirements.txt` (runtime deps) + `requirements-llm.txt` (optional LLM) + `requirements-build.txt`
+- [x] 4.  Create `pyproject.toml` (packaging metadata + `thans` entry point)
+- [x] 5.  Create `.gitignore` (models, venv, build artifacts, pycache)
+- [x] 6.  Write `README.md` (overview, quick start, command reference, model sizes, safety notes)
 
 ## Phase 1 — Config & model management (steps 7–11)
 
-- [ ] 7.  `thans/config.py` — app paths, models dir, working root, config load/save, safety defaults
-- [ ] 8.  `models/README.md` — document the dedicated models folder layout
-- [ ] 9.  `thans/model_manager.py` — detect installed models (Vosk STT, GGUF LLM, TTS) and report status
-- [ ] 10. `scripts/download_models.py` — one-time offline-model downloader (Vosk small STT + GGUF LLM, stdlib only, progress bars, skip-if-present)
+- [x] 7.  `thans/config.py` — app paths, models dir, working root, config load/save, safety defaults
+- [x] 8.  `models/README.md` — document the dedicated models folder layout
+- [x] 9.  `thans/model_manager.py` — detect installed models (Vosk STT, GGUF LLM, TTS) and report status
+- [x] 10. `scripts/download_models.py` — one-time offline-model downloader (Vosk small STT + GGUF LLM, stdlib only, progress bars, skip-if-present)
 - [ ] 11. Model status surfaced in UI chips + `--models` CLI flag
 
 ## Phase 2 — Rule-based command parser (steps 12–25)
 
-- [ ] 12. Define command schema (action + params dicts; allowed-actions whitelist)
-- [ ] 13. `thans/parser_rules.py` — intent registry, text normalization (fillers, punctuation, casing)
-- [ ] 14. `list` / `show` / "what's in X" / "how many files in X" commands
-- [ ] 15. `create folder X [in Y]` command
-- [ ] 16. `create file X [with content ...] [in Y]` command
-- [ ] 17. `rename A to B` command
-- [ ] 18. `move A to B` command (incl. "into", dest-as-folder semantics)
-- [ ] 19. `copy A to B` command
-- [ ] 20. `delete X` command (safe trash-by-default + `permanently` flag)
-- [ ] 21. `find` / `search for` commands (name substring + extension forms like "pdf files")
-- [ ] 22. `open X` / `show in folder X` commands (file-manager reveal)
-- [ ] 23. `organize [dir] by extension|date` command
-- [ ] 24. `help`, `cd`/`go to`, `undo` commands
-- [ ] 25. Fuzzy name resolution (case-insensitive unique match, ambiguity listing) + "in <dir>" qualifier fallback
+- [x] 12. Define command schema (action + params dicts; allowed-actions whitelist)
+- [x] 13. `thans/parser_rules.py` — intent registry, text normalization (fillers, punctuation, casing)
+- [x] 14. `list` / `show` / "what's in X" / "how many files in X" commands
+- [x] 15. `create folder X [in Y]` command
+- [x] 16. `create file X [with content ...] [in Y]` command
+- [x] 17. `rename A to B` command
+- [x] 18. `move A to B` command (incl. "into", dest-as-folder semantics)
+- [x] 19. `copy A to B` command
+- [x] 20. `delete X` command (safe trash-by-default + `permanently` flag)
+- [x] 21. `find` / `search for` commands (name substring + extension forms like "pdf files")
+- [x] 22. `open X` / `show in folder X` commands (file-manager reveal)
+- [x] 23. `organize [dir] by extension|date` command
+- [x] 24. `help`, `cd`/`go to`, `undo` commands
+- [x] 25. Fuzzy name resolution (case-insensitive unique match, ambiguity listing) + "in <dir>" qualifier fallback
 
 ## Phase 3 — Action engine & safety (steps 26–32)
 
-- [ ] 26. Path safety: all operations confined to allowed working root (reject escapes, `..`, absolute paths outside root)
-- [ ] 27. File actions: create (with content), rename, move, copy, delete
-- [ ] 28. Folder actions: create (nested), rename, move, copy, delete
-- [ ] 29. Trash + restore mechanism (`.thans_trash` inside working root, timestamped entries)
-- [ ] 30. Search implementation (walk, case-insensitive, ext filter, skip trash/hidden, result cap)
-- [ ] 31. Organize implementation (group files into subfolders by extension or by date, de-dupe names)
-- [ ] 32. `thans/engine.py` — parse → resolve → execute → human-readable report + undo record (single-level undo)
+- [x] 26. Path safety: all operations confined to allowed working root (reject escapes, `..`, absolute paths outside root)
+- [x] 27. File actions: create (with content), rename, move, copy, delete
+- [x] 28. Folder actions: create (nested), rename, move, copy, delete
+- [x] 29. Trash + restore mechanism (`.thans_trash` inside working root, timestamped entries)
+- [x] 30. Search implementation (walk, case-insensitive, ext filter, skip trash/hidden, result cap)
+- [x] 31. Organize implementation (group files into subfolders by extension or by date, de-dupe names)
+- [x] 32. `thans/engine.py` — parse → resolve → execute → human-readable report + undo record (single-level undo)
 
 ## Phase 4 — Tkinter GUI (steps 33–40)
 
@@ -97,6 +97,10 @@ Legend: ⬜ not started · 🚧 in progress · ✅ done
 | Date | Step(s) | Note |
 |------|---------|------|
 | 2026-10-12 | — | Plan created (50 steps). Build starting. |
+| 2026-10-12 | 1–6 | Phase 0 committed: skeleton, requirements, pyproject, .gitignore, README. |
+| 2026-10-12 | 7–10 | Phase 1: config, model_manager, models/README, download_models.py. |
+| 2026-10-12 | 12–25 | Phase 2: rule parser — all 13 intent families, fuzzy names, fillers. |
+| 2026-10-12 | 26–32 | Phase 3: actions + engine (root confinement, trash, undo). 45/45 tests pass. |
 
 ## Known decisions (so future sessions don't re-litigate)
 
