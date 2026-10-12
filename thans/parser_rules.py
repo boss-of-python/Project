@@ -36,10 +36,19 @@ def normalize(text: str) -> str:
     t = re.sub(r"^(?:hey |ok(ay)? )*(?:thans|assistant|computer|jarvis)[,:\s]+", "", t)
     for _ in range(3):
         t = re.sub(r"^(?:please|pls|can you|could you|would you|will you)\s+", "", t)
+    # a bare "." is how people point at *here* ("how many files in .")
+    t = re.sub(r"(?:(?<=^)|(?<=\s))\.(?=\s|$)", "here", t)
     t = t.strip(" \t\r\n!.,;:'\"")
     t = re.sub(r"\s+", " ", t).strip()
     return t
 
+
+#: Words that mean "the folder I am standing in" — resolved to the current dir.
+_HERE_WORDS = {
+    "", ".", "here", "this", "this folder", "this directory", "this dir",
+    "current", "current folder", "the current folder", "current directory",
+    "cwd", "my folder", "the folder", "our folder", "local folder",
+}
 
 _KIND_LEAD = re.compile(r"^(?:the |a |an |my )?(?:subfolder|subdirectory|folder|directory|dir|file)\s+")
 _KIND_TAIL = re.compile(r"\s+(?:subfolder|subdirectory|folder|directory|dir|file)$")
@@ -52,6 +61,8 @@ def _name(s: Optional[str]) -> str:
     s = re.sub(r"^(?:the |a |an )", "", s)          # leading article
     s = _KIND_LEAD.sub("", s, count=1).strip()       # leading kind word ("folder work" → "work")
     s = _KIND_TAIL.sub("", s).strip()                # trailing kind word ("work folder" → "work")
+    if s.lower() in _HERE_WORDS:                     # "here"/"this folder"/"." → current dir
+        return ""
     return s
 
 
@@ -112,7 +123,8 @@ _CONTENT_KW = r"(?:with the text|with the content|with text|with content|contain
 
 
 def _list_build(m: re.Match) -> Optional[dict]:
-    d = (m["dir"] or "").strip()
+    groups = m.groupdict()
+    d = (groups.get("dir") or groups.get("dir2") or "").strip()
     return {"action": "list", "params": {"path": _name(d) or None}}
 
 
@@ -182,6 +194,12 @@ RULES: list[tuple[str, re.Pattern, Callable[[re.Match], Optional[dict]]]] = [
      re.compile(r"^(?:delete|remove|trash|get rid of) (?P<p>.+)$"),
      _delete_build),
 
+    # "find report.pdf in docs" — folder-qualified search (before the plain form)
+    ("search-in",
+     re.compile(r"^(?:find|search) (?:for )?(?P<q>.+?) (?:in|inside|under) (?P<dir>.+)$"),
+     lambda m: {"action": "search",
+                "params": {"query": (m["q"] or "").strip(), "path": _name(m["dir"])}}),
+
     ("search",
      re.compile(r"^(?:find|search) (?:for )?(?P<q>.+)$"),
      lambda m: {"action": "search", "params": {"query": (m["q"] or "").strip()}}),
@@ -195,15 +213,20 @@ RULES: list[tuple[str, re.Pattern, Callable[[re.Match], Optional[dict]]]] = [
      lambda m: {"action": "organize", "params": {"path": None, "mode": "extension"}}),
 
     ("how-many",
-     re.compile(r"^how many (?:files?|folders?|items?) (?:are )?in (?P<dir>.+)$"),
-     lambda m: {"action": "list", "params": {"path": _name(m["dir"]), "count": True}}),
+     re.compile(r"^(?:how many|count|number of|count of) (?:the )?"
+                r"(?:files?|folders?|items?|entries|things)"
+                r"(?: (?:are )?(?:in )?(?P<dir>.+))?$"),
+     lambda m: {"action": "list",
+                "params": {"path": _name(m["dir"]) if m["dir"] else "",
+                           "count": True}}),
 
     ("what-in",
      re.compile(r"^what(?:'s| is) in (?P<dir>.+)$"),
      lambda m: {"action": "list", "params": {"path": _name(m["dir"])}}),
 
     ("list",
-     re.compile(r"^(?:list|ls|show)(?: me)?(?: (?:the |all )?(?:files?|folders?|contents?|everything|items?))?(?: (?:in )?(?P<dir>.+))?$"),
+     re.compile(r"^(?:list|ls|show)(?: me)?(?: (?:the |all )?(?:files?|folders?|contents?|everything|items?))?"
+                r"(?: in (?P<dir>.+)| (?P<dir2>.+))?$"),
      _list_build),
 ]
 

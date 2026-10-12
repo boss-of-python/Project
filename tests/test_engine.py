@@ -11,6 +11,48 @@ from thans import actions  # noqa: E402
 from thans.engine import Engine  # noqa: E402
 
 
+class TestFolderQualifiedCommands(unittest.TestCase):
+    """`find x in y`, `how many files in .` and the count aliases end to end."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        (self.root / "docs").mkdir()
+        (self.root / "docs" / "invoice-2026.pdf").write_text("x")
+        (self.root / "other").mkdir()
+        (self.root / "other" / "invoice-old.pdf").write_text("x")
+        (self.root / "note.txt").write_text("hi")
+        self.engine = Engine(self.root, {})
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_search_inside_a_named_folder(self):
+        res = self.engine.run("find invoice in docs")
+        self.assertTrue(res.ok, res.message)
+        self.assertIn("invoice-2026.pdf", res.message)
+        self.assertNotIn("invoice-old.pdf", res.message)
+
+    def test_search_here_stays_in_the_current_folder(self):
+        self.engine.run("go to other")
+        res = self.engine.run("find invoice in .")
+        self.assertTrue(res.ok, res.message)
+        self.assertIn("invoice-old.pdf", res.message)
+
+    def test_count_aliases(self):
+        for phrase in ("how many files in .", "count files in docs",
+                       "number of items in docs", "how many files"):
+            res = self.engine.run(phrase)
+            self.assertTrue(res.ok, f"{phrase} → {res.message}")
+            self.assertIn("files", res.message)
+
+    def test_count_of_an_empty_folder_says_zero(self):
+        (self.root / "empty").mkdir()
+        res = self.engine.run("how many files in empty")
+        self.assertTrue(res.ok)
+        self.assertTrue("0 files" in res.message or "0 folders" in res.message, res.message)
+
+
 class EngineTestBase(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="thans_test_"))

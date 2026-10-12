@@ -15,6 +15,40 @@ The **same offline assistant** on your phone: the exact same `thans` core
 | LLM free-form parsing | ❌ | desktop-only (no llama.cpp NDK recipe); the rule parser covers every documented command, so nothing essential is lost |
 | Delete-to-trash / undo | ✅ | trash lives in the app folder; reversible via `↩ Undo` (including `organize`) |
 
+## Look and feel
+
+The phone UI is the desktop app, adapted for thumbs — same palette, type scale
+and motion language, all taken from `thans_android/theme.py`, which *derives*
+its colours from the desktop design tokens (`thans/ui/theme.py`). There is
+literally one palette in the repository.
+
+* **Boot:** the mark and wordmark grow in over a gradient sweep while the engine
+  really starts (no fake progress bar).
+* **Transcript:** message bubbles grow+ease in, newest on top; THANS bubbles
+  carry a `source` tag (`rules`) and errors are tinted red with a toast.
+* **Composer:** as-you-type suggestion pills (`logic.suggest` — the same code the
+  desktop uses), a mic button whose ring breathes while listening, and a Send
+  button that lights up.
+* **Hero card:** first-run card with three tap-to-fill starters; it fades out
+  once you send your first command.
+* **Feedback:** toasts stack under the header and dismiss themselves; the busy
+  sweep + thinking dots appear only while a command runs.
+* **Touch targets:** ≥ 44 dp for every button; the mic is bottom-right where a
+  thumb rests, and Android's back button stops listening instead of leaving.
+
+## Tests
+
+```bash
+python -m unittest tests.test_android_app -v   # from the repo root
+```
+
+These run **without a display, without GL and without Kivy installed**: a fake
+Kivy (`tests/fakekivy.py`) provides widgets, properties, canvas instructions,
+animations and a virtual clock, while the *static* checks parse `thans.kv` and
+verify that every `app.*` reference exists on the app class and every id used by
+Python is declared in the layout. The same job runs in CI before the APK build,
+so a broken layout fails the build instead of the phone.
+
 ## Get the APK — option A: GitHub Actions (no local tools)
 
 1. In your repo, open the **Actions** tab → **Build Android APK** → **Run workflow**.

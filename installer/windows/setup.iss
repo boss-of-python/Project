@@ -4,7 +4,7 @@
 ; ============================================================
 
 #define MyAppName "THANS"
-#define MyAppVersion "0.1.0"
+#define MyAppVersion "0.2.0"
 #define MyAppPublisher "THANS"
 #define MyAppExeName "THANS.exe"
 
@@ -23,6 +23,8 @@ OutputBaseFilename=THANS-Setup-{#MyAppVersion}
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
+; branded wizard + Start-menu/desktop icons (thans.ico ships in the repo)
+SetupIconFile=..\..\installer\thans.ico
 ArchitecturesInstallIn64BitMode=x64compatible
 ; Models may be up to ~500 MB - allow the temp dir to grow.
 UninstallDisplayIcon={app}\{#MyAppExeName}
@@ -40,8 +42,9 @@ Source: "..\..\dist\THANS.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\..\models\*"; DestDir: "{app}\models"; Flags: recursesubdirs ignoreversion
 
 [Icons]
-Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppExeName}"
+Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon; IconFilename: "{app}\{#MyAppExeName}"
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#MyAppName}}"; Flags: nowait postinstall skipifsilent
