@@ -30,6 +30,9 @@ DEFAULTS: dict[str, Any] = {
     "use_llm": False,                # optional offline LLM parser
     "llm_model": DEFAULT_LLM_MODEL,  # GGUF filename inside models/
     "permanent_delete": False,       # if True, 'delete' skips the trash
+    "motion": True,                  # UI animations (off = instant, flat UI)
+    "window": "",                    # last window geometry, restored on start
+    "onboarded": False,              # one-time first-run tour, then never again
 }
 
 

@@ -24,9 +24,17 @@ def main() -> int:
             "--noconfirm", "--clean", "--windowed",
             "--name", "THANS",
             "--paths", str(ROOT),
+            "--hidden-import", "thans.ui",
+            "--hidden-import", "thans.ui.theme",
+            "--hidden-import", "thans.ui.widgets",
+            "--hidden-import", "thans.ui.chat",
+            "--hidden-import", "thans.ui.panels",
             "thans/__main__.py"]
     if onedir:
         args.insert(1, "--onedir")
+    icon = ROOT / "installer" / "thans.ico"
+    if icon.exists():
+        args[1:1] = ["--icon", str(icon)]
 
     print("Building THANS with PyInstaller…")
     print("$ " + " ".join(args))

@@ -1,8 +1,11 @@
 # THANS — Offline Voice & Text File Assistant
 
-A **100 % offline** desktop assistant (Python + tkinter) that lets you **access,
-alter, create and organize files & folders** by *speaking* or *typing* natural
-commands. No cloud, no accounts, no internet after the one-time model download.
+A **100 % offline** assistant for **desktop (Python + tkinter)** and **Android
+(Kivy)** that lets you **access, alter, create and organize files & folders** by
+*speaking* or *typing* natural commands. No cloud, no accounts, no internet
+after the one-time model download.
+
+![THANS UI — one design language, two apps](docs/ui-preview.png)
 
 ```
 You:  "create folder project reports in work"
@@ -26,6 +29,46 @@ The rule parser handles **every command in the reference below** without any
 model, so the app is fully functional even before models are downloaded.
 The small LLM (default **Qwen2.5-0.5B-Instruct Q4_K_M**) is optional sugar for
 loose phrasing — it is switched off by default and can be enabled in Settings.
+
+## The interface
+
+A calm dark surface with one accent ramp, built entirely from canvas-drawn
+widgets so it can move: bubbles slide and fade, answers *type themselves* in
+behind a caret, the composer breathes while THANS works, toasts stack in the
+corner, and a start screen runs the real boot steps instead of a fake
+progress bar. Everything animates from a single 60 fps loop, so the app stays
+smooth and never blocks on a file operation.
+
+| | Desktop | Android |
+|---|---|---|
+| Layout | transcript + live dashboard (files · folders · size · free space) | transcript + hero card, thumb-reachable composer |
+| Input | typing with as-you-type suggestions, Enter/Tab/↑↓, mic on `F2` | same suggestions, on-screen keyboard, mic button |
+| Feedback | streaming replies, thinking dots, toasts, status pills, confetti on a tidy-up | same, tuned for touch (bigger targets, toast stack) |
+| Keyboard | `F1` command sheet · `F2` voice · `F5` rescan · `Ctrl+K` clear · `Ctrl+Z` undo · `Ctrl+,` settings · `Ctrl +/-` text size | — |
+| Motion | on by default, switchable off in Settings ("Animations") | derived from the same tokens/durations |
+
+Design tokens live in **`thans/ui/theme.py`** (palette, radii, durations, type
+scale, glyph sets); the phone theme (`android/thans_android/theme.py`) *derives*
+from them, so both apps are always the same product. `python
+scripts/render_ui_preview.py` renders the picture above straight from those
+tokens — it cannot drift from the app.
+
+## Headless & scriptable
+
+No window, no display, no microphone needed — the same engine is available on
+the command line (handy for servers, cron jobs and scripts):
+
+```bash
+python -m thans --run "organize downloads by date"        # run one command
+python -m thans --run "create folder reports" --run "list" # run several in order
+python -m thans --run "find invoice" --json               # one JSON object per command
+python -m thans --cli --root ~/work                       # interactive prompt
+```
+
+Contract: results go to **stdout**, problems to **stderr** (prefixed `THANS: `),
+and the exit code is `0` only if every command succeeded — so `thans --run … &&
+next_step` works in a shell script. Headless modes never read or write your
+saved config unless you pass `--root`.
 
 ## Quick start
 
@@ -121,6 +164,7 @@ capability matrix and local buildozer instructions).
 
 ```
 thans/            the app (GUI, engine, parsers, actions, audio)
+thans/ui/         design system: theme tokens, widget kit, transcript, panels
 thans/actions/    file & folder operations (safety-checked)
 models/           dedicated folder for all offline models
 scripts/          download_models.py, build_installer.py
@@ -143,5 +187,22 @@ PROGRESS.md       50-step build plan + live status (resumable build log)
 ## Development
 
 ```bash
-python -m thans --selftest   # headless test suite (parser, actions, engine)
+python -m thans --selftest          # full suite: parser, actions, engine, CLI, UI
+python scripts/render_ui_preview.py # regenerate docs/ui-preview.png
 ```
+
+The suite (190+ tests) runs **without a display**: the UI layers are exercised
+through faithful test doubles of tkinter (`tests/faketk.py`) and Kivy
+(`tests/fakekivy.py`) that validate option names, run the real animation loop
+on a virtual clock and drive real worker threads. Android-specific checks parse
+`android/thans.kv` and prove every `app.*` handler and every widget id that the
+Python code touches actually exists.
+
+## Works with
+
+* **Windows 10/11** — portable `THANS.exe` or the Inno Setup wizard (desktop +
+  Start-menu shortcuts, icon, uninstaller)
+* **Linux** — PyInstaller build + `install.sh` (launcher, `.desktop` entry, icon)
+* **macOS** — `pip install -r requirements.txt && python -m thans`
+* **Android 5.0+** — `android/` Kivy port; APK from GitHub Actions or buildozer
+* **Anything headless** — `thans --run "…"` / `thans --cli`

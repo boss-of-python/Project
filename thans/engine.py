@@ -13,6 +13,24 @@ from pathlib import Path
 from . import actions, config
 from .parser_rules import ALLOWED_ACTIONS, parse as parse_rules
 
+#: (action, example, one-line description) — the single source for the GUI's
+#: help sheet and the CLI's plain-text help.
+COMMAND_REFERENCE: list[tuple[str, str, str]] = [
+    ("list", "list · show files · what's in downloads", "look inside a folder (or count)"),
+    ("mkdir", "create folder reports in work", "make a folder (nested paths OK)"),
+    ("touch", "create file memo.txt with hello", "make a file, optionally with text"),
+    ("rename", "rename old.txt to new.txt", "rename a file or folder"),
+    ("move", "move report.pdf to work", "move it into another folder"),
+    ("copy", "copy report.pdf to backups", "copy it somewhere else"),
+    ("delete", "delete draft.txt", "send it to the trash (undoable)"),
+    ("search", "find invoice · search for pdf files", "search by name or type"),
+    ("open", "open notes.txt · show in folder x.pdf", "open it, or reveal it in the file manager"),
+    ("organize", "organize downloads by date", "group loose files by type or date"),
+    ("cd", "go to work · cd", "change the folder you are working in"),
+    ("undo", "undo", "reverse the last action"),
+    ("help", "help", "this list"),
+]
+
 HELP_TEXT = """I can manage files & folders inside your working folder. Try:
   • list  ·  show files  ·  what's in <folder>  ·  how many files in <folder>
   • create folder <name> [in <folder>]

@@ -3,12 +3,15 @@ title = THANS
 package.name = thans
 package.domain = org.thans
 source.dir = .
-source.include_exts = py,pvs,kv,json,md,txt
+source.include_exts = py,pvs,kv,json,md,txt,png
 version = 0.2.0
 
 # Android needs only pure-Python core + Kivy UI + pyjnius for the (optional)
 # on-device speech/TTS bridge. No vosk/sounddevice/pyttsx3 — those are desktop-only.
 requirements = python3==3.11,kivy,pyjnius
+
+icon.filename = %(source.dir)s/thans_android/assets/icon.png
+presplash.filename = %(source.dir)s/thans_android/assets/presplash.png
 
 orientation = portrait
 fullscreen = 0

@@ -63,6 +63,18 @@ def speak(text: str) -> None:
 
 
 # ---------------------------------------------------------------- STT
+def stt_available() -> bool:
+    """True when the device actually has a recognition service (cheap check)."""
+    if not ANDROID:
+        return False
+    try:
+        from jnius import autoclass
+        SpeechRecognizer = autoclass("android.speech.SpeechRecognizer")
+        return bool(SpeechRecognizer.isRecognitionAvailable(_context()))
+    except Exception:
+        return False
+
+
 def _make_listener(on_result):
     """Python implementation of android.speech.RecognitionListener (jnius)."""
     from jnius import JavaClass, autoclass

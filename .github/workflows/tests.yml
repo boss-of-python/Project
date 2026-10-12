@@ -1,0 +1,65 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  core:
+    name: core + UI tests (py${{ matrix.python }} · ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      # The suite is dependency-free: no display, no audio, no models, no kivy.
+      # Kivy itself is import-guarded in android/ and never needed here.
+      - name: Run the full suite
+        run: python -m thans --selftest
+
+      - name: Headless CLI smoke test
+        shell: bash
+        run: |
+          tmp="$(mktemp -d)"
+          python -m thans --run "create folder ci-demo" --root "$tmp"
+          python -m thans --run "list" --root "$tmp"
+          python -m thans --run "how many files in ." --json --root "$tmp"
+          test -d "$tmp/ci-demo"
+
+      - name: Exit code contract (a failure must return 1)
+        shell: bash
+        run: |
+          tmp="$(mktemp -d)"
+          if python -m thans --run "delete ghost.txt" --root "$tmp"; then
+            echo "expected a non-zero exit code"; exit 1
+          fi
+          echo "ok: failures exit non-zero"
+
+  ui-preview:
+    name: render UI preview
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install pillow
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y fonts-dejavu-core
+      - name: Render docs/ui-preview.png
+        run: python scripts/render_ui_preview.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ui-preview
+          path: docs/ui-preview.png
