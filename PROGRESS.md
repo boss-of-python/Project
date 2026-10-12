@@ -8,8 +8,8 @@
 creates and organizes files & folders via **voice commands** and **text commands**,
 with an optional small offline LLM for free-form phrasing.
 
-**Last update:** 2026-10-12 — Phases 1–3 complete, 45/45 tests green
-**Current position:** STEP 33 / 50
+**Last update:** 2026-10-12 — ALL 50 STEPS COMPLETE ✅  (45/45 tests green, end-to-end demo verified)
+**Current position:** STEP 50 / 50 — build complete
 **Resume rule:** do the first unchecked step; do not skip ahead; commit after each phase.
 
 Legend: ⬜ not started · 🚧 in progress · ✅ done
@@ -31,7 +31,7 @@ Legend: ⬜ not started · 🚧 in progress · ✅ done
 - [x] 8.  `models/README.md` — document the dedicated models folder layout
 - [x] 9.  `thans/model_manager.py` — detect installed models (Vosk STT, GGUF LLM, TTS) and report status
 - [x] 10. `scripts/download_models.py` — one-time offline-model downloader (Vosk small STT + GGUF LLM, stdlib only, progress bars, skip-if-present)
-- [ ] 11. Model status surfaced in UI chips + `--models` CLI flag
+- [x] 11. Model status surfaced in UI chips + `--models` CLI flag
 
 ## Phase 2 — Rule-based command parser (steps 12–25)
 
@@ -62,33 +62,33 @@ Legend: ⬜ not started · 🚧 in progress · ✅ done
 
 ## Phase 4 — Tkinter GUI (steps 33–40)
 
-- [ ] 33. `thans/app.py` — main window layout, dark theme, graceful import guard
-- [ ] 34. Chat view (user / THANS / system message styles, auto-scroll)
-- [ ] 35. Text input bar — Enter handling, command history (Up/Down)
-- [ ] 36. Model status panel (STT/TTS/LLM chips) + one-click "download models" button
-- [ ] 37. Working-root picker + safety indicator in status bar
-- [ ] 38. Settings dialog (TTS on/off + rate, LLM on/off + model picker, permanent-delete toggle, root)
-- [ ] 39. Threaded command execution (worker thread + queue so UI never blocks)
-- [ ] 40. Status bar (current dir, busy state, version)
+- [x] 33. `thans/app.py` — main window layout, dark theme, graceful import guard
+- [x] 34. Chat view (user / THANS / system message styles, auto-scroll)
+- [x] 35. Text input bar — Enter handling, command history (Up/Down)
+- [x] 36. Model status panel (STT/TTS/LLM chips) + one-click "download models" button
+- [x] 37. Working-root picker + safety indicator in status bar
+- [x] 38. Settings dialog (TTS on/off + rate, LLM on/off + model picker, permanent-delete toggle, root)
+- [x] 39. Threaded command execution (worker thread + queue so UI never blocks)
+- [x] 40. Status bar (current dir, busy state, version)
 
 ## Phase 5 — Offline audio (steps 41–44)
 
-- [ ] 41. `thans/stt.py` — Vosk offline speech-to-text (mic 16 kHz, int16 streaming)
-- [ ] 42. Mic thread with endpointing (final transcript → command pipeline), clean stop
-- [ ] 43. `thans/tts.py` — pyttsx3 offline text-to-speech on dedicated worker thread (queue-based, silent-fail)
-- [ ] 44. Voice loop wiring: listen → parse → act → speak result
+- [x] 41. `thans/stt.py` — Vosk offline speech-to-text (mic 16 kHz, int16 streaming)
+- [x] 42. Mic thread with endpointing (final transcript → command pipeline), clean stop
+- [x] 43. `thans/tts.py` — pyttsx3 offline text-to-speech on dedicated worker thread (queue-based, silent-fail)
+- [x] 44. Voice loop wiring: listen → parse → act → speak result
 
 ## Phase 6 — Optional offline LLM (steps 45–47)
 
-- [ ] 45. `thans/parser_llm.py` — llama.cpp wrapper, strict JSON-only system prompt, action whitelist validation, JSON extraction from LLM output
-- [ ] 46. LLM model catalog + placement in `models/` (default Qwen2.5-0.5B-Instruct Q4_K_M ≈ 408 MB; smaller/larger alternatives documented)
-- [ ] 47. Fallback chain: rule parser → LLM parser (if enabled) → polite "I didn't catch that — say 'help'"
+- [x] 45. `thans/parser_llm.py` — llama.cpp wrapper, strict JSON-only system prompt, action whitelist validation, JSON extraction from LLM output
+- [x] 46. LLM model catalog + placement in `models/` (default Qwen2.5-0.5B-Instruct Q4_K_M ≈ 408 MB; smaller/larger alternatives documented)
+- [x] 47. Fallback chain: rule parser → LLM parser (if enabled) → polite "I didn't catch that — say 'help'"
 
 ## Phase 7 — Packaging, installer & QA (steps 48–50)
 
-- [ ] 48. `scripts/build_installer.py` — PyInstaller one-file build (windowed, `--name THANS`)
-- [ ] 49. `installer/windows/` — `build_exe.bat` + Inno Setup `setup.iss` (desktop shortcut, optional models bundle, uninstaller)
-- [ ] 50. `installer/linux/` — `build_exe.sh` + `install.sh` + `thans.desktop`; full test-suite run (`--selftest`) green; final README polish
+- [x] 48. `scripts/build_installer.py` — PyInstaller one-file build (windowed, `--name THANS`)
+- [x] 49. `installer/windows/` — `build_exe.bat` + Inno Setup `setup.iss` (desktop shortcut, optional models bundle, uninstaller)
+- [x] 50. `installer/linux/` — `build_exe.sh` + `install.sh` + `thans.desktop`; full test-suite run (`--selftest`) green; final README polish
 
 ---
 
@@ -101,6 +101,10 @@ Legend: ⬜ not started · 🚧 in progress · ✅ done
 | 2026-10-12 | 7–10 | Phase 1: config, model_manager, models/README, download_models.py. |
 | 2026-10-12 | 12–25 | Phase 2: rule parser — all 13 intent families, fuzzy names, fillers. |
 | 2026-10-12 | 26–32 | Phase 3: actions + engine (root confinement, trash, undo). 45/45 tests pass. |
+| 2026-10-12 | 33–40 | Phase 4: tkinter GUI (chat, chips, mic, settings, threaded worker). |
+| 2026-10-12 | 41–44 | Phase 5: Vosk STT + pyttsx3 TTS + voice loop wiring. |
+| 2026-10-12 | 45–47 | Phase 6: optional llama.cpp LLM parser + whitelist validation + fallback chain. |
+| 2026-10-12 | 48–50 | Phase 7: PyInstaller build script, Windows (Inno Setup) + Linux installers. Full suite green. |
 
 ## Known decisions (so future sessions don't re-litigate)
 

@@ -108,6 +108,9 @@ def _touch_build(m: re.Match) -> Optional[dict]:
     }}
 
 
+_CONTENT_KW = r"(?:with the text|with the content|with text|with content|containing|that says|with)"
+
+
 def _list_build(m: re.Match) -> Optional[dict]:
     d = (m["dir"] or "").strip()
     return {"action": "list", "params": {"path": _name(d) or None}}
@@ -146,8 +149,13 @@ RULES: list[tuple[str, re.Pattern, Callable[[re.Match], Optional[dict]]]] = [
      re.compile(r"^(?:create|make|new) (?:a |an |an? new )?(?:empty )?(?:folder|directory|dir) (?:called |named |with the name |with name )?(?P<p>.+?)(?: in (?P<dir>.+?))?$"),
      _mkdir_build),
 
+    # "create file X [with content] [in dir]"
     ("touch",
-     re.compile(r"^(?:create|make|new) (?:a |an |an? new )?file (?:called |named |with the name |with name )?(?P<p>.+?)(?: (?:with|containing|that says|with text|with content|with the text|with the content) (?P<content>(?:(?! in ).)+))?(?: in (?P<dir>.+?))?$"),
+     re.compile(r"^(?:create|make|new) (?:a |an |an? new )?file (?:called |named |with the name |with name )?(?P<p>(?:(?! in ).)+?)(?: " + _CONTENT_KW + r" (?P<content>(?:(?! in ).)+))?(?: in (?P<dir>(?:(?! with ).)+?))?$"),
+     _touch_build),
+    # "create file X in dir with content"
+    ("touch-in-content",
+     re.compile(r"^(?:create|make|new) (?:a |an |an? new )?file (?:called |named |with the name |with name )?(?P<p>(?:(?! in ).)+?) in (?P<dir>.+?) " + _CONTENT_KW + r" (?P<content>.+)$"),
      _touch_build),
 
     ("rename",
