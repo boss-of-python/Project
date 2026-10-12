@@ -10,8 +10,8 @@ with an optional small offline LLM for free-form phrasing.
 Desktop build = tkinter UI (steps 1–50). Android build = Kivy UI reusing the same
 pure-Python core (steps 51–60).
 
-**Last update:** 2026-10-12 — Phase 9 complete (fixed runtime UI/Android/CI issues); starting Phase 10–12 (impressive animations & minimalistic UX for Desktop + Android)
-**Current position:** STEP 65 / 85 — PR #1 & #2 merged to main; Phase 9 complete; Phase 10 in progress
+**Last update:** 2026-10-12 — Phase 10 complete (shared UX intelligence & animation engine); starting Phase 11 (Desktop UI/UX)
+**Current position:** STEP 70 / 85 — Phase 10 complete; Phase 11 in progress
 **Resume rule:** do the first unchecked step; do not skip ahead; commit + push after each phase.
 
 Legend: ⬜ not started · 🚧 in progress · ✅ done
@@ -115,11 +115,11 @@ Legend: ⬜ not started · 🚧 in progress · ✅ done
 
 ## Phase 10 — Shared UX Intelligence & Animation Engine (steps 66–70)
 
-- [ ] 66. `thans/ui_helpers.py` — real-time intent preview (`preview_intent`), smart command & filename autocomplete (`autocomplete`), quick-action chip catalog
-- [ ] 67. `thans/ui_helpers.py` — live directory snapshot (`dir_snapshot`), diff tracking for visual highlight animations, smart file-type icons, human-readable sizes, breadcrumb path segments, and `.thans_trash` counter
-- [ ] 68. `thans/animations.py` — color interpolation (`lerp_hex`, `lerp_rgba`), cubic/sine easing curves, 60fps multi-wave sonic orb/waveform geometry generator (`compute_wave_points`), streaming text chunker, and pulse decay math
-- [ ] 69. Extend `thans/config.py` with UI/UX preferences (`theme`: dark/light, `animations`: on/off, `sidebar`: open/closed)
-- [ ] 70. Unit tests (`tests/test_ui_helpers.py`) covering intent preview, autocomplete, snapshots/diffs, breadcrumbs, and animation math
+- [x] 66. `thans/ui_helpers.py` — real-time intent preview (`preview_intent`), smart command & filename autocomplete (`autocomplete`), quick-action chip catalog
+- [x] 67. `thans/ui_helpers.py` — live directory snapshot (`dir_snapshot`), diff tracking for visual highlight animations, smart file-type icons, human-readable sizes, breadcrumb path segments, and `.thans_trash` counter
+- [x] 68. `thans/animations.py` — color interpolation (`lerp_hex`, `lerp_rgba`), cubic/sine easing curves, 60fps multi-wave sonic orb/waveform geometry generator (`compute_wave_points`), streaming text chunker, and pulse decay math
+- [x] 69. Extend `thans/config.py` with UI/UX preferences (`theme`: dark/light, `animations`: on/off, `sidebar`: open/closed)
+- [x] 70. Unit tests (`tests/test_ui_helpers.py`) covering intent preview, autocomplete, snapshots/diffs, breadcrumbs, and animation math
 
 ## Phase 11 — Impressive Minimalistic Desktop UI/UX (Windows & Linux) (steps 71–78)
 
@@ -160,6 +160,7 @@ Legend: ⬜ not started · 🚧 in progress · ✅ done
 | 2026-10-12 | 51 | Desktop build merged to `main` (PR #1) — now visible in the repo. |
 | 2026-10-12 | 52–60 | Phase 8: Android (Kivy) port reusing the core; headless-validated; CI builds the APK artifact. PR #2 opened & merged. |
 | 2026-10-12 | 61–65 | Phase 9: Fixed Android/Desktop runtime calls, runtime mic permissions, `undo` for `organize`, `cd ..`, and APK CI dependencies/caching. |
+| 2026-10-12 | 66–70 | Phase 10: Shared UX intelligence (`thans/ui_helpers.py`) + 60fps animation & theme engine (`thans/animations.py`) + 11 unit tests. |
 
 ## Known decisions (so future sessions don't re-litigate)
 
